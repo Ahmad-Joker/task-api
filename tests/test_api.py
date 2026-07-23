@@ -84,3 +84,75 @@ def test_create_task_with_whitespace_title():
 
     assert response.status_code == 400
     assert response.json() == {"error": "Title must not be empty"}
+
+
+def test_update_only_title():
+    response = client.put("/tasks/1", json={"title": "Updated title"})
+
+    assert response.status_code == 200
+    assert response.json() == {"id": 1, "title": "Updated title", "done": False}
+
+
+def test_update_only_done():
+    response = client.put("/tasks/1", json={"done": True})
+
+    assert response.status_code == 200
+    assert response.json() == {"id": 1, "title": "Learn FastAPI basics", "done": True}
+
+
+def test_update_title_and_done():
+    response = client.put("/tasks/1", json={"title": "Finish project", "done": True})
+
+    assert response.status_code == 200
+    assert response.json() == {"id": 1, "title": "Finish project", "done": True}
+
+
+def test_update_with_empty_body():
+    response = client.put("/tasks/1", json={})
+
+    assert response.status_code == 400
+    assert response.json() == {"error": "Request body must include title, done, or both"}
+
+
+def test_update_with_invalid_title():
+    response = client.put("/tasks/1", json={"title": "   "})
+
+    assert response.status_code == 400
+    assert response.json() == {"error": "Title must not be empty"}
+
+
+def test_update_with_invalid_done_value():
+    response = client.put("/tasks/1", json={"done": "yes"})
+
+    assert response.status_code == 400
+    assert response.json() == {"error": "Done must be true or false"}
+
+
+def test_update_nonexistent_task():
+    response = client.put("/tasks/999", json={"title": "Missing task"})
+
+    assert response.status_code == 404
+    assert response.json() == {"error": "Task 999 not found"}
+
+
+def test_delete_existing_task():
+    response = client.delete("/tasks/1")
+
+    assert response.status_code == 204
+    assert response.content == b""
+
+
+def test_deleted_task_is_gone():
+    delete_response = client.delete("/tasks/1")
+    read_response = client.get("/tasks/1")
+
+    assert delete_response.status_code == 204
+    assert read_response.status_code == 404
+    assert read_response.json() == {"error": "Task 1 not found"}
+
+
+def test_delete_nonexistent_task():
+    response = client.delete("/tasks/999")
+
+    assert response.status_code == 404
+    assert response.json() == {"error": "Task 999 not found"}
