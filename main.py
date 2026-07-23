@@ -115,12 +115,6 @@ def validate_title(title):
     return title.strip()
 
 
-def get_next_task_id():
-    if not tasks:
-        return 1
-    return max(task["id"] for task in tasks) + 1
-
-
 @app.get(
     "/",
     tags=["System"],
@@ -323,6 +317,14 @@ async def update_task(task_id: int, request: Request):
             return bad_request("Done must be true or false")
         task["done"] = done
 
+    with get_connection() as connection:
+        cursor = connection.cursor()
+        cursor.execute(
+            "UPDATE tasks SET title = ?, done = ? WHERE id = ?",
+            (task["title"], int(task["done"]), task_id),
+        )
+        connection.commit()
+
     return task
 
 
@@ -349,5 +351,9 @@ def delete_task(task_id: int):
     if task is None:
         return task_not_found(task_id)
 
-    tasks.remove(task)
+    with get_connection() as connection:
+        cursor = connection.cursor()
+        cursor.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+        connection.commit()
+
     return Response(status_code=204)

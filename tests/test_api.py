@@ -226,6 +226,32 @@ def test_delete_nonexistent_task():
     assert response.json() == {"error": "Task 999 not found"}
 
 
+def test_data_persists_across_separate_database_connections():
+    create_response = client.post("/tasks", json={"title": "Persistent task"})
+    task_id = create_response.json()["id"]
+
+    with sqlite3.connect(main.DB_PATH) as first_connection:
+        first_cursor = first_connection.cursor()
+        first_cursor.execute("SELECT title FROM tasks WHERE id = ?", (task_id,))
+        assert first_cursor.fetchone()[0] == "Persistent task"
+
+    with sqlite3.connect(main.DB_PATH) as second_connection:
+        second_cursor = second_connection.cursor()
+        second_cursor.execute("SELECT title FROM tasks WHERE id = ?", (task_id,))
+        assert second_cursor.fetchone()[0] == "Persistent task"
+
+
+def test_data_remains_after_reinitializing_database():
+    create_response = client.post("/tasks", json={"title": "Restart-safe task"})
+    task_id = create_response.json()["id"]
+
+    initialize_database()
+
+    response = client.get(f"/tasks/{task_id}")
+    assert response.status_code == 200
+    assert response.json() == {"id": task_id, "title": "Restart-safe task", "done": False}
+
+
 def test_swagger_and_openapi_are_accessible():
     docs_response = client.get("/docs")
     openapi_response = client.get("/openapi.json")
