@@ -1,11 +1,9 @@
+import sqlite3
+from contextlib import asynccontextmanager
+from pathlib import Path
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
-
-app = FastAPI(
-    title="Task API",
-    version="1.0",
-    description="A beginner-friendly in-memory Task CRUD API built with FastAPI.",
-)
 
 STARTING_TASKS = [
     {"id": 1, "title": "Learn FastAPI basics", "done": False},
@@ -13,7 +11,54 @@ STARTING_TASKS = [
     {"id": 3, "title": "Review Swagger docs", "done": True},
 ]
 
+DB_PATH = Path(__file__).with_name("tasks.db")
+
 tasks = [task.copy() for task in STARTING_TASKS]
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    initialize_database()
+    yield
+
+
+app = FastAPI(
+    title="Task API",
+    version="1.0",
+    description="A beginner-friendly in-memory Task CRUD API built with FastAPI.",
+    lifespan=lifespan,
+)
+
+
+def get_connection():
+    connection = sqlite3.connect(DB_PATH)
+    connection.row_factory = sqlite3.Row
+    return connection
+
+
+def initialize_database():
+    with get_connection() as connection:
+        cursor = connection.cursor()
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                done INTEGER NOT NULL DEFAULT 0
+            )
+            """
+        )
+        cursor.execute("SELECT COUNT(*) AS task_count FROM tasks")
+        task_count = cursor.fetchone()["task_count"]
+
+        if task_count == 0:
+            for task in STARTING_TASKS:
+                cursor.execute(
+                    "INSERT INTO tasks (title, done) VALUES (?, ?)",
+                    (task["title"], int(task["done"])),
+                )
+
+        connection.commit()
 
 
 def reset_tasks():

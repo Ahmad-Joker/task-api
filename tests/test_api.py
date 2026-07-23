@@ -1,7 +1,10 @@
+import sqlite3
+
 from fastapi.testclient import TestClient
 import pytest
 
-from main import app, reset_tasks
+import main
+from main import app, initialize_database, reset_tasks
 
 
 client = TestClient(app)
@@ -28,6 +31,55 @@ def test_read_health():
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+def test_database_file_is_created(tmp_path, monkeypatch):
+    test_db = tmp_path / "tasks.db"
+    monkeypatch.setattr(main, "DB_PATH", test_db)
+
+    initialize_database()
+
+    assert test_db.exists()
+
+
+def test_tasks_table_is_created(tmp_path, monkeypatch):
+    test_db = tmp_path / "tasks.db"
+    monkeypatch.setattr(main, "DB_PATH", test_db)
+
+    initialize_database()
+
+    with sqlite3.connect(test_db) as connection:
+        cursor = connection.cursor()
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type = ? AND name = ?",
+            ("table", "tasks"),
+        )
+        assert cursor.fetchone() == ("tasks",)
+
+
+def test_database_seeds_three_tasks_on_first_initialization(tmp_path, monkeypatch):
+    test_db = tmp_path / "tasks.db"
+    monkeypatch.setattr(main, "DB_PATH", test_db)
+
+    initialize_database()
+
+    with sqlite3.connect(test_db) as connection:
+        cursor = connection.cursor()
+        cursor.execute("SELECT COUNT(*) FROM tasks")
+        assert cursor.fetchone()[0] == 3
+
+
+def test_database_reinitialization_does_not_duplicate_seeds(tmp_path, monkeypatch):
+    test_db = tmp_path / "tasks.db"
+    monkeypatch.setattr(main, "DB_PATH", test_db)
+
+    initialize_database()
+    initialize_database()
+
+    with sqlite3.connect(test_db) as connection:
+        cursor = connection.cursor()
+        cursor.execute("SELECT COUNT(*) FROM tasks")
+        assert cursor.fetchone()[0] == 3
 
 
 def test_read_tasks():
