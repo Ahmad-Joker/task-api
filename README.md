@@ -1,6 +1,8 @@
 # Task API
 
-A beginner-friendly Task CRUD API for a Week 2 Backend Internship assignment. The API is built with FastAPI and stores tasks in a simple in-memory Python list.
+A beginner-friendly Task CRUD API for Backend Internship assignments. The API started as a Week 2 in-memory FastAPI project and was upgraded for Week 3 Assignment A2 to store tasks in a SQLite database named `tasks.db`.
+
+The public API behavior stayed the same: the routes, request shapes, response shapes, validation rules, and status codes remain compatible with Assignment 1.
 
 ## Features
 
@@ -13,6 +15,9 @@ A beginner-friendly Task CRUD API for a Week 2 Backend Internship assignment. Th
 - Clear JSON error messages
 - Interactive Swagger UI at `/docs`
 - Automated tests with Pytest and FastAPI TestClient
+- SQLite persistence across server restarts
+- Automatic database and table creation
+- Seed data only when the database is empty
 
 ## Technology Used
 
@@ -21,7 +26,8 @@ A beginner-friendly Task CRUD API for a Week 2 Backend Internship assignment. Th
 - Uvicorn
 - Pytest
 - FastAPI TestClient
-- In-memory Python list storage
+- Python's built-in `sqlite3` module
+- SQLite database file storage
 
 ## Project Structure
 
@@ -31,6 +37,7 @@ task-api/
 |-- requirements.txt
 |-- README.md
 |-- .gitignore
+|-- tasks.db              # generated automatically and ignored by Git
 |-- tests/
 |   `-- test_api.py
 `-- screenshots/
@@ -66,6 +73,8 @@ Use this command from the project root:
 ```bash
 uvicorn main:app --reload
 ```
+
+When the API starts, it automatically creates `tasks.db` in the project root if the file does not already exist.
 
 ## Local URLs
 
@@ -180,11 +189,91 @@ Run the full test suite from the project root:
 pytest
 ```
 
-The tests reset the in-memory task list before each test so one test cannot affect another.
+The tests use temporary SQLite database files so one test cannot affect another and the real development `tasks.db` is not changed permanently.
 
-## In-Memory Storage
+## Week 3 Database Upgrade
 
-This API does not use a database or external storage. Tasks are stored in a Python list in memory. The task list resets to the three example tasks whenever the server restarts.
+Assignment 1 used a simple Python list:
+
+```text
+Client -> API -> in-memory list
+```
+
+Assignment 2 uses SQLite:
+
+```text
+Client -> API -> SQLite tasks.db
+```
+
+SQLite was selected because it is perfect for a beginner backend assignment:
+
+- It stores the database in one file.
+- It does not require a separate database server.
+- It needs zero setup beyond Python.
+- Data survives server restarts.
+
+## Database Schema
+
+The app creates this table automatically:
+
+```sql
+CREATE TABLE IF NOT EXISTS tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    done INTEGER NOT NULL DEFAULT 0
+);
+```
+
+SQLite stores `done` as `0` or `1`. API responses convert those values into real JSON booleans: `false` or `true`.
+
+## Automatic Database Initialization
+
+On startup, the app:
+
+1. Opens or creates `tasks.db`.
+2. Creates the `tasks` table if it does not exist.
+3. Counts existing rows.
+4. Seeds exactly three example tasks only when the table is empty.
+5. Commits changes.
+6. Closes the database connection safely.
+
+Restarting the server does not duplicate the three seed tasks.
+
+## Persistence
+
+Tasks are now stored in `tasks.db`, so created, updated, and deleted data remains after the server restarts.
+
+To demonstrate persistence:
+
+1. Start the API.
+2. Create a task with `POST /tasks`.
+3. Stop the server with `Ctrl + C`.
+4. Start the API again.
+5. Run `GET /tasks`.
+
+The task you created should still be present.
+
+## Database File
+
+The database file is located in the project root:
+
+```text
+tasks.db
+```
+
+This file is generated automatically and ignored by Git. A clean clone can run the app without manually creating the database.
+
+## Parameterized Queries
+
+All SQL queries that include values use parameterized placeholders. This keeps user input separate from SQL text.
+
+Example:
+
+```python
+cursor.execute("SELECT id, title, done FROM tasks WHERE id = ?", (task_id,))
+```
+
+The project does not build SQL with f-strings, string concatenation, or formatting for user-supplied values.
 
 ## Swagger Screenshot
 
@@ -252,13 +341,13 @@ screenshots/database-browser.png
 
 This repository includes `screenshots/README.md` with exact steps for capturing it.
 
-## Assignment Checklist
+## Assignment 1 Checklist
 
 - [x] Python 3.10+ FastAPI project
 - [x] Uvicorn run command
 - [x] Pytest test suite
-- [x] No database or external storage
-- [x] In-memory task list
+- [x] Original Week 2 implementation used no database or external storage
+- [x] Original Week 2 implementation used an in-memory task list
 - [x] Exactly three preloaded example tasks
 - [x] `GET /`
 - [x] `GET /health`
@@ -273,3 +362,20 @@ This repository includes `screenshots/README.md` with exact steps for capturing 
 - [x] ReDoc at `/redoc`
 - [x] Screenshot instructions
 - [x] Beginner-friendly README
+
+## Assignment 2 Checklist
+
+- [x] Replaced in-memory storage with SQLite
+- [x] Uses Python's built-in `sqlite3` module
+- [x] Creates `tasks.db` automatically
+- [x] Creates the `tasks` table automatically
+- [x] Seeds exactly three tasks only when empty
+- [x] Does not duplicate seeds on restart
+- [x] Keeps endpoint behavior compatible with Assignment 1
+- [x] Converts SQLite `0` and `1` values to JSON booleans
+- [x] Uses parameterized SQL queries
+- [x] Tests use temporary databases
+- [x] `tasks.db` is ignored by Git
+- [x] Swagger remains available at `/docs`
+- [x] DB Browser instructions are documented
+- [x] Database screenshot instructions are documented

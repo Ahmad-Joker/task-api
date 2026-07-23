@@ -13,8 +13,6 @@ STARTING_TASKS = [
 
 DB_PATH = Path(__file__).with_name("tasks.db")
 
-tasks = [task.copy() for task in STARTING_TASKS]
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -25,7 +23,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Task API",
     version="1.0",
-    description="A beginner-friendly in-memory Task CRUD API built with FastAPI.",
+    description="A beginner-friendly SQLite-backed Task CRUD API built with FastAPI.",
     lifespan=lifespan,
 )
 
@@ -67,11 +65,6 @@ def row_to_task(row):
         "title": row["title"],
         "done": bool(row["done"]),
     }
-
-
-def reset_tasks():
-    tasks.clear()
-    tasks.extend(task.copy() for task in STARTING_TASKS)
 
 
 def find_task(task_id: int):
@@ -145,7 +138,7 @@ def read_health():
     "/tasks",
     tags=["Tasks"],
     summary="List all tasks",
-    description="Returns every task currently stored in the in-memory task list.",
+    description="Returns every task currently stored in the SQLite database.",
     response_description="Complete task list",
 )
 def read_tasks():
