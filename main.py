@@ -1,7 +1,11 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 
-app = FastAPI(title="Task API", version="1.0")
+app = FastAPI(
+    title="Task API",
+    version="1.0",
+    description="A beginner-friendly in-memory Task CRUD API built with FastAPI.",
+)
 
 STARTING_TASKS = [
     {"id": 1, "title": "Learn FastAPI basics", "done": False},
@@ -57,7 +61,13 @@ def get_next_task_id():
     return max(task["id"] for task in tasks) + 1
 
 
-@app.get("/", tags=["System"])
+@app.get(
+    "/",
+    tags=["System"],
+    summary="Show API information",
+    description="Returns the API name, version, and main endpoint list.",
+    response_description="Basic API information",
+)
 def read_root():
     return {
         "name": "Task API",
@@ -66,17 +76,45 @@ def read_root():
     }
 
 
-@app.get("/health", tags=["System"])
+@app.get(
+    "/health",
+    tags=["System"],
+    summary="Check API health",
+    description="Returns a simple status response that confirms the API is running.",
+    response_description="Health status",
+)
 def read_health():
     return {"status": "ok"}
 
 
-@app.get("/tasks", tags=["Tasks"])
+@app.get(
+    "/tasks",
+    tags=["Tasks"],
+    summary="List all tasks",
+    description="Returns every task currently stored in the in-memory task list.",
+    response_description="Complete task list",
+)
 def read_tasks():
     return tasks
 
 
-@app.get("/tasks/{task_id}", tags=["Tasks"])
+@app.get(
+    "/tasks/{task_id}",
+    tags=["Tasks"],
+    summary="Get one task",
+    description="Returns a single task by ID, or a JSON 404 error when it does not exist.",
+    response_description="The matching task",
+    responses={
+        404: {
+            "description": "Task not found",
+            "content": {
+                "application/json": {
+                    "example": {"error": "Task 999 not found"},
+                }
+            },
+        }
+    },
+)
 def read_task(task_id: int):
     task = find_task(task_id)
     if task is None:
@@ -84,7 +122,47 @@ def read_task(task_id: int):
     return task
 
 
-@app.post("/tasks", status_code=201, tags=["Tasks"])
+@app.post(
+    "/tasks",
+    status_code=201,
+    tags=["Tasks"],
+    summary="Create a task",
+    description="Creates a new task from a title. The API generates the next integer ID and sets done to false.",
+    response_description="The created task",
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "content": {
+                "application/json": {
+                    "schema": {
+                        "type": "object",
+                        "properties": {"title": {"type": "string", "example": "Buy milk"}},
+                        "required": ["title"],
+                    },
+                    "example": {"title": "Buy milk"},
+                }
+            },
+        },
+        "responses": {
+            "201": {
+                "description": "Task created",
+                "content": {
+                    "application/json": {
+                        "example": {"id": 4, "title": "Buy milk", "done": False},
+                    }
+                },
+            },
+            "400": {
+                "description": "Invalid task input",
+                "content": {
+                    "application/json": {
+                        "example": {"error": "Title must not be empty"},
+                    }
+                },
+            },
+        },
+    },
+)
 async def create_task(request: Request):
     body = await read_json_body(request)
     if body is None or "title" not in body:
@@ -99,7 +177,56 @@ async def create_task(request: Request):
     return task
 
 
-@app.put("/tasks/{task_id}", tags=["Tasks"])
+@app.put(
+    "/tasks/{task_id}",
+    tags=["Tasks"],
+    summary="Update a task",
+    description="Updates a task title, done status, or both. Fields not included in the request are preserved.",
+    response_description="The updated task",
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "content": {
+                "application/json": {
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "title": {"type": "string", "example": "Updated title"},
+                            "done": {"type": "boolean", "example": True},
+                        },
+                    },
+                    "example": {"title": "Updated title", "done": True},
+                }
+            },
+        },
+        "responses": {
+            "200": {
+                "description": "Task updated",
+                "content": {
+                    "application/json": {
+                        "example": {"id": 1, "title": "Updated title", "done": True},
+                    }
+                },
+            },
+            "400": {
+                "description": "Invalid update input",
+                "content": {
+                    "application/json": {
+                        "example": {"error": "Done must be true or false"},
+                    }
+                },
+            },
+            "404": {
+                "description": "Task not found",
+                "content": {
+                    "application/json": {
+                        "example": {"error": "Task 999 not found"},
+                    }
+                },
+            },
+        },
+    },
+)
 async def update_task(task_id: int, request: Request):
     task = find_task(task_id)
     if task is None:
@@ -127,7 +254,24 @@ async def update_task(task_id: int, request: Request):
     return task
 
 
-@app.delete("/tasks/{task_id}", status_code=204, tags=["Tasks"])
+@app.delete(
+    "/tasks/{task_id}",
+    status_code=204,
+    tags=["Tasks"],
+    summary="Delete a task",
+    description="Deletes a task by ID and returns an empty response body.",
+    response_description="Task deleted",
+    responses={
+        404: {
+            "description": "Task not found",
+            "content": {
+                "application/json": {
+                    "example": {"error": "Task 999 not found"},
+                }
+            },
+        }
+    },
+)
 def delete_task(task_id: int):
     task = find_task(task_id)
     if task is None:

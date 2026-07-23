@@ -156,3 +156,12 @@ def test_delete_nonexistent_task():
 
     assert response.status_code == 404
     assert response.json() == {"error": "Task 999 not found"}
+
+
+def test_swagger_and_openapi_are_accessible():
+    docs_response = client.get("/docs")
+    openapi_response = client.get("/openapi.json")
+
+    assert docs_response.status_code == 200
+    assert openapi_response.status_code == 200
+    assert openapi_response.json()["info"]["title"] == "Task API"
