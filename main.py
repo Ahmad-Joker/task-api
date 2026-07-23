@@ -237,9 +237,16 @@ async def create_task(request: Request):
     if title is None:
         return bad_request("Title must not be empty")
 
-    task = {"id": get_next_task_id(), "title": title, "done": False}
-    tasks.append(task)
-    return task
+    with get_connection() as connection:
+        cursor = connection.cursor()
+        cursor.execute(
+            "INSERT INTO tasks (title, done) VALUES (?, ?)",
+            (title, 0),
+        )
+        task_id = cursor.lastrowid
+        connection.commit()
+
+    return {"id": task_id, "title": title, "done": False}
 
 
 @app.put(

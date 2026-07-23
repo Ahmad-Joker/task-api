@@ -119,6 +119,20 @@ def test_create_valid_task():
     assert len(list_response.json()) == 4
 
 
+def test_create_persists_task_across_database_connections():
+    response = client.post("/tasks", json={"title": "Buy milk"})
+
+    assert response.status_code == 201
+
+    with sqlite3.connect(main.DB_PATH) as connection:
+        cursor = connection.cursor()
+        cursor.execute(
+            "SELECT title, done FROM tasks WHERE id = ?",
+            (response.json()["id"],),
+        )
+        assert cursor.fetchone() == ("Buy milk", 0)
+
+
 def test_create_task_with_missing_title():
     response = client.post("/tasks", json={})
 
