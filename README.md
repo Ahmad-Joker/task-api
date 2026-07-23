@@ -27,14 +27,14 @@ A beginner-friendly Task CRUD API for a Week 2 Backend Internship assignment. Th
 
 ```text
 task-api/
-├── main.py
-├── requirements.txt
-├── README.md
-├── .gitignore
-├── tests/
-│   └── test_api.py
-└── screenshots/
-    └── README.md
+|-- main.py
+|-- requirements.txt
+|-- README.md
+|-- .gitignore
+|-- tests/
+|   `-- test_api.py
+`-- screenshots/
+    `-- README.md
 ```
 
 ## Installation
