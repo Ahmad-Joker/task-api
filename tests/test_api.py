@@ -53,3 +53,34 @@ def test_read_nonexistent_task():
 
     assert response.status_code == 404
     assert response.json() == {"error": "Task 999 not found"}
+
+
+def test_create_valid_task():
+    response = client.post("/tasks", json={"title": "Buy milk"})
+
+    assert response.status_code == 201
+    assert response.json() == {"id": 4, "title": "Buy milk", "done": False}
+
+    list_response = client.get("/tasks")
+    assert len(list_response.json()) == 4
+
+
+def test_create_task_with_missing_title():
+    response = client.post("/tasks", json={})
+
+    assert response.status_code == 400
+    assert response.json() == {"error": "Title is required"}
+
+
+def test_create_task_with_empty_title():
+    response = client.post("/tasks", json={"title": ""})
+
+    assert response.status_code == 400
+    assert response.json() == {"error": "Title must not be empty"}
+
+
+def test_create_task_with_whitespace_title():
+    response = client.post("/tasks", json={"title": "   "})
+
+    assert response.status_code == 400
+    assert response.json() == {"error": "Title must not be empty"}
