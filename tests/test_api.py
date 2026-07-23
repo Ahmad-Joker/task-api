@@ -4,15 +4,17 @@ from fastapi.testclient import TestClient
 import pytest
 
 import main
-from main import app, initialize_database, reset_tasks
+from main import app, initialize_database
 
 
 client = TestClient(app)
 
 
 @pytest.fixture(autouse=True)
-def reset_task_list():
-    reset_tasks()
+def use_temporary_database(tmp_path, monkeypatch):
+    test_db = tmp_path / "tasks.db"
+    monkeypatch.setattr(main, "DB_PATH", test_db)
+    initialize_database()
 
 
 def test_read_root():

@@ -61,16 +61,31 @@ def initialize_database():
         connection.commit()
 
 
+def row_to_task(row):
+    return {
+        "id": row["id"],
+        "title": row["title"],
+        "done": bool(row["done"]),
+    }
+
+
 def reset_tasks():
     tasks.clear()
     tasks.extend(task.copy() for task in STARTING_TASKS)
 
 
 def find_task(task_id: int):
-    for task in tasks:
-        if task["id"] == task_id:
-            return task
-    return None
+    with get_connection() as connection:
+        cursor = connection.cursor()
+        cursor.execute(
+            "SELECT id, title, done FROM tasks WHERE id = ?",
+            (task_id,),
+        )
+        row = cursor.fetchone()
+
+    if row is None:
+        return None
+    return row_to_task(row)
 
 
 def task_not_found(task_id: int):
@@ -140,7 +155,12 @@ def read_health():
     response_description="Complete task list",
 )
 def read_tasks():
-    return tasks
+    with get_connection() as connection:
+        cursor = connection.cursor()
+        cursor.execute("SELECT id, title, done FROM tasks")
+        rows = cursor.fetchall()
+
+    return [row_to_task(row) for row in rows]
 
 
 @app.get(
