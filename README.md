@@ -196,6 +196,62 @@ screenshots/swagger-ui.png
 
 This repository includes `screenshots/README.md` with step-by-step instructions for capturing and saving that screenshot.
 
+## DB Browser for SQLite
+
+Week 3 asks you to explore the generated SQLite database manually. DB Browser for SQLite is a beginner-friendly desktop app for opening `.db` files and running SQL.
+
+To inspect the database:
+
+1. Install DB Browser for SQLite from https://sqlitebrowser.org/.
+2. Start this API once so `tasks.db` is created.
+3. Open DB Browser for SQLite.
+4. Click **Open Database** and choose `tasks.db` from the project root.
+5. Open the **Browse Data** tab.
+6. Select the `tasks` table.
+7. Open the **Execute SQL** tab to run SQL queries.
+
+Useful SQL queries:
+
+```sql
+SELECT * FROM tasks;
+```
+
+```sql
+SELECT * FROM tasks WHERE done = 1;
+```
+
+```sql
+SELECT COUNT(*) FROM tasks;
+```
+
+```sql
+UPDATE tasks SET done = 1;
+```
+
+```sql
+DELETE FROM tasks WHERE done = 1;
+```
+
+The first three queries are safe read-only queries. The `UPDATE` and `DELETE` examples change data, so use them only on a temporary or demo database unless you mean to change your project database.
+
+Safe example:
+
+```sql
+SELECT COUNT(*) FROM tasks;
+```
+
+On a fresh database, this returns `3` because the app seeds exactly three example tasks when the table is empty.
+
+## Database Screenshot
+
+The Week 3 database screenshot should be saved at:
+
+```text
+screenshots/database-browser.png
+```
+
+This repository includes `screenshots/README.md` with exact steps for capturing it.
+
 ## Assignment Checklist
 
 - [x] Python 3.10+ FastAPI project
