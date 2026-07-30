@@ -5,7 +5,10 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .env
+*.env.local
 tasks.db
 *.db
 *.sqlite
 *.sqlite3
+screenshots/
+tests/

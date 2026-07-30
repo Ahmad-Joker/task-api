@@ -438,3 +438,196 @@ The screenshot can show `psql`, pgAdmin, or DBeaver displaying the `tasks` table
 - [x] `.env` is ignored
 - [x] `.env.example` is tracked
 - [x] Screenshot instructions are documented
+
+## Assignment A4: Supabase Authentication
+
+Assignment A4 adds Supabase Auth to the existing Task API. Supabase is the Identity Provider: it stores users, hashes passwords, signs JSON Web Tokens, and verifies tokens for protected routes.
+
+Authentication architecture:
+
+```text
+Client -> FastAPI -> Supabase Auth
+Client -> FastAPI -> PostgreSQL tasks database
+```
+
+The task CRUD API remains available, and the new auth routes add sign up, login, bearer-token protection, dashboard access, and logout.
+
+## Authentication Concepts
+
+An Identity Provider is a trusted service that manages user identity. This project uses Supabase Auth so the API does not store passwords, hash passwords, or implement custom cryptography.
+
+A JWT is a signed token that represents a verified user session. The API does not trust a token just because it can be decoded; it asks Supabase to verify it with `get_user(token)`.
+
+An access token is the short-lived bearer token sent in the `Authorization` header.
+
+A refresh token is returned by login so a client can request a new access token later. Do not log it or commit it.
+
+Bearer authentication means requests include:
+
+```text
+Authorization: Bearer <access_token>
+```
+
+`401 Unauthorized` means authentication is missing, malformed, invalid, or expired. `403 Forbidden` is for a valid user who is authenticated but not allowed to perform an action. This assignment uses `401` for authentication failures.
+
+## Supabase Setup
+
+1. Create a free Supabase project at https://supabase.com/.
+2. Open **Project Settings -> API**.
+3. Copy the Project URL.
+4. Copy the anon/public key.
+5. Never copy or use the `service_role` key in this project.
+6. Add the values to `.env`:
+
+   ```text
+   SUPABASE_URL=your_project_url
+   SUPABASE_KEY=your_anon_key
+   ```
+
+7. For this practice assignment, open **Authentication -> Sign In / Providers -> Email** and disable email confirmation if immediate login is required.
+8. In production, keep email confirmation enabled.
+
+The real `.env` file is ignored by Git. `.env.example` contains placeholders only.
+
+## A4 API Reference
+
+| Method | Route | Purpose | Auth Required | Success Code |
+| --- | --- | --- | --- | --- |
+| POST | `/auth/signup` | Create a Supabase user | No | 201 |
+| POST | `/auth/login` | Log in and receive tokens | No | 200 |
+| POST | `/auth/logout` | Log out current user | Yes | 204 |
+| GET | `/public/info` | Public info | No | 200 |
+| GET | `/protected/profile` | Current user profile | Yes | 200 |
+| GET | `/protected/dashboard` | Protected dashboard | Yes | 200 |
+| GET | `/` | API info | No | 200 |
+| GET | `/health` | Health check | No | 200 |
+| GET | `/tasks` | List tasks | No | 200 |
+| POST | `/tasks` | Create task | No | 201 |
+| PUT | `/tasks/{task_id}` | Update task | No | 200 |
+| DELETE | `/tasks/{task_id}` | Delete task | No | 204 |
+
+## Auth curl Examples
+
+Sign up:
+
+```bash
+curl -i -X POST http://localhost:8000/auth/signup \
+  -H "Content-Type: application/json" \
+  -d "{\"email\":\"test@example.com\",\"password\":\"password123\"}"
+```
+
+Log in:
+
+```bash
+curl -i -X POST http://localhost:8000/auth/login \
+  -H "Content-Type: application/json" \
+  -d "{\"email\":\"test@example.com\",\"password\":\"password123\"}"
+```
+
+Protected profile:
+
+```bash
+curl -i http://localhost:8000/protected/profile \
+  -H "Authorization: Bearer <access_token>"
+```
+
+Tampered-token failure:
+
+```bash
+curl -i http://localhost:8000/protected/profile \
+  -H "Authorization: Bearer changed.invalid.token"
+```
+
+Expected result:
+
+```json
+{
+  "error": "Invalid or expired token"
+}
+```
+
+Logout:
+
+```bash
+curl -i -X POST http://localhost:8000/auth/logout \
+  -H "Authorization: Bearer <access_token>"
+```
+
+## Swagger Authorization
+
+1. Start the app.
+2. Open http://localhost:8000/docs.
+3. Sign up and log in using the public auth routes.
+4. Copy the `access_token` from the login response.
+5. Click **Authorize**.
+6. Paste the token.
+7. Call `/protected/profile` or `/protected/dashboard`.
+
+Protected routes show lock icons because FastAPI's `HTTPBearer` dependency is configured in OpenAPI.
+
+## A4 Testing
+
+Automated tests mock Supabase so they do not depend on live credentials or real tokens:
+
+```bash
+pytest
+```
+
+Manual integration with real Supabase credentials:
+
+1. Set `SUPABASE_URL` and `SUPABASE_KEY` in `.env`.
+2. Start the stack:
+
+   ```bash
+   docker compose up --build
+   ```
+
+3. Verify signup returns `201`.
+4. Verify login returns tokens.
+5. Verify `/public/info` returns `200` without a token.
+6. Verify `/protected/profile` returns `401` without a token.
+7. Verify `/protected/profile` returns `200` with a valid token.
+8. Change one token character and confirm `401`.
+9. Verify `/protected/dashboard` returns `200` with a valid token.
+10. Verify logout returns `204`.
+
+Never paste full real tokens into screenshots, commits, or reports.
+
+## A4 Security Choices
+
+- Passwords are never stored by the API.
+- Passwords are never logged.
+- Tokens are never logged.
+- JWT payloads are not trusted without Supabase verification.
+- The Supabase `service_role` key is never used.
+- Auth logic lives in `auth.py`.
+- Protected routes reuse `get_current_user()`.
+- `.env` and `*.env.local` are ignored.
+
+## A4 Screenshot
+
+The A4 Swagger auth screenshot should be saved as:
+
+```text
+screenshots/swagger-auth.png
+```
+
+Instructions are in `screenshots/README.md`.
+
+## Assignment A4 Checklist
+
+- [x] Supabase SDK added
+- [x] Supabase client reads environment variables
+- [x] `.env.example` uses placeholders
+- [x] Signup route implemented
+- [x] Login route implemented
+- [x] Public route implemented
+- [x] Protected profile route verifies tokens through Supabase
+- [x] Shared auth dependency implemented
+- [x] Protected dashboard route implemented
+- [x] Logout route implemented
+- [x] Swagger bearer auth metadata tested
+- [x] Supabase mocked in automated tests
+- [x] Existing task API tests still pass
+- [x] Docker Compose keeps PostgreSQL task stack working
+- [x] README and screenshot instructions updated

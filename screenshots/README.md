@@ -138,3 +138,49 @@ You can capture this from `psql`, pgAdmin, or DBeaver.
    ```
 
 Do not claim the PostgreSQL screenshot exists until `screenshots/postgres-data.png` has actually been created.
+
+## Swagger Auth Screenshot
+
+Assignment A4 asks for a Swagger authentication screenshot saved as:
+
+```text
+screenshots/swagger-auth.png
+```
+
+To create it:
+
+1. Add real Supabase values to `.env`.
+
+2. Start the API:
+
+   ```bash
+   docker compose up --build
+   ```
+
+3. Open Swagger:
+
+   ```text
+   http://localhost:8000/docs
+   ```
+
+4. Use `POST /auth/signup` to create a practice user.
+
+5. Use `POST /auth/login` with the same email and password.
+
+6. Copy the `access_token` from the login response.
+
+7. Click **Authorize** near the top of Swagger.
+
+8. Paste the access token into the HTTPBearer field.
+
+9. Call `GET /protected/profile`.
+
+10. Capture Swagger showing the protected route lock icon and a successful `200` response.
+
+11. Save the image as:
+
+    ```text
+    screenshots/swagger-auth.png
+    ```
+
+Do not include full real access tokens or refresh tokens in screenshots if they are visible.
