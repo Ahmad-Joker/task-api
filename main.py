@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 
 from database import (
@@ -14,6 +14,8 @@ from database import (
 from auth import (
     AuthServiceError,
     InvalidCredentialsError,
+    InvalidTokenError,
+    extract_bearer_token,
     login_user,
     signup_user,
     validate_email,
@@ -33,6 +35,11 @@ app = FastAPI(
     description="A beginner-friendly PostgreSQL-backed Task CRUD API built with FastAPI.",
     lifespan=lifespan,
 )
+
+
+@app.exception_handler(InvalidTokenError)
+def invalid_token_exception_handler(request: Request, exc: InvalidTokenError):
+    return unauthorized(str(exc))
 
 
 def find_task(task_id: int):
@@ -130,6 +137,26 @@ async def login(request: Request):
         return login_user(email, password)
     except InvalidCredentialsError:
         return unauthorized("Invalid login credentials")
+
+
+@app.get(
+    "/public/info",
+    tags=["Public"],
+    summary="Read public info",
+    description="Returns public information without requiring authentication.",
+)
+def public_info():
+    return {"message": "Welcome stranger! This info is public."}
+
+
+@app.get(
+    "/protected/profile",
+    tags=["Protected"],
+    summary="Read protected profile",
+    description="Requires an Authorization: Bearer access token.",
+)
+def protected_profile(token: str = Depends(extract_bearer_token)):
+    return {"message": "Token received", "token_length": len(token)}
 
 
 @app.get(

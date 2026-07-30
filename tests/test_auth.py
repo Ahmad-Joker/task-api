@@ -156,3 +156,31 @@ def test_login_invalid_credentials(monkeypatch):
 
     assert response.status_code == 401
     assert response.json() == {"error": "Invalid login credentials"}
+
+
+def test_public_route_returns_200_without_auth():
+    response = client.get("/public/info")
+
+    assert response.status_code == 200
+    assert response.json() == {"message": "Welcome stranger! This info is public."}
+
+
+def test_protected_profile_without_header_returns_401():
+    response = client.get("/protected/profile")
+
+    assert response.status_code == 401
+    assert response.json() == {"error": "Access token required"}
+
+
+def test_protected_profile_with_malformed_header_returns_401():
+    response = client.get("/protected/profile", headers={"Authorization": "Bearer"})
+
+    assert response.status_code == 401
+    assert response.json() == {"error": "Access token required"}
+
+
+def test_protected_profile_with_wrong_scheme_returns_401():
+    response = client.get("/protected/profile", headers={"Authorization": "Basic abc123"})
+
+    assert response.status_code == 401
+    assert response.json() == {"error": "Access token required"}

@@ -125,3 +125,13 @@ def login_user(email, password):
         "token_type": "bearer",
         "user": safe_user_info(user),
     }
+
+
+def extract_bearer_token(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)):
+    if credentials is None:
+        raise InvalidTokenError("Access token required")
+    if credentials.scheme.lower() != "bearer":
+        raise InvalidTokenError("Access token required")
+    if not credentials.credentials or credentials.credentials.strip() == "":
+        raise InvalidTokenError("Access token required")
+    return credentials.credentials
