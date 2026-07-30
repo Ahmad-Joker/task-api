@@ -31,9 +31,10 @@ def fake_session():
 
 
 class FakeAuth:
-    def __init__(self, fail_signup=False, fail_login=False):
+    def __init__(self, fail_signup=False, fail_login=False, invalid_token=False):
         self.fail_signup = fail_signup
         self.fail_login = fail_login
+        self.invalid_token = invalid_token
 
     def sign_up(self, payload):
         if self.fail_signup:
@@ -46,6 +47,11 @@ class FakeAuth:
             raise RuntimeError("invalid credentials")
         assert payload == {"email": "test@example.com", "password": "password123"}
         return SimpleNamespace(user=fake_user(), session=fake_session())
+
+    def get_user(self, token):
+        if self.invalid_token or token != "valid-token":
+            raise RuntimeError("invalid token")
+        return SimpleNamespace(user=fake_user())
 
 
 class FakeSupabase:
@@ -184,3 +190,39 @@ def test_protected_profile_with_wrong_scheme_returns_401():
 
     assert response.status_code == 401
     assert response.json() == {"error": "Access token required"}
+
+
+def test_protected_profile_with_invalid_token_returns_401():
+    response = client.get(
+        "/protected/profile",
+        headers={"Authorization": "Bearer invalid-token"},
+    )
+
+    assert response.status_code == 401
+    assert response.json() == {"error": "Invalid or expired token"}
+
+
+def test_protected_profile_with_expired_or_rejected_token_returns_401(monkeypatch):
+    monkeypatch.setattr(auth, "get_supabase", lambda: FakeSupabase(FakeAuth(invalid_token=True)))
+
+    response = client.get(
+        "/protected/profile",
+        headers={"Authorization": "Bearer valid-token"},
+    )
+
+    assert response.status_code == 401
+    assert response.json() == {"error": "Invalid or expired token"}
+
+
+def test_protected_profile_with_valid_token_returns_profile_data():
+    response = client.get(
+        "/protected/profile",
+        headers={"Authorization": "Bearer valid-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "id": "user-123",
+        "email": "test@example.com",
+        "created_at": "2026-07-30T00:00:00Z",
+    }

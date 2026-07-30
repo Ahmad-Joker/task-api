@@ -135,3 +135,17 @@ def extract_bearer_token(credentials: HTTPAuthorizationCredentials = Depends(bea
     if not credentials.credentials or credentials.credentials.strip() == "":
         raise InvalidTokenError("Access token required")
     return credentials.credentials
+
+
+def verify_access_token(token):
+    try:
+        response = get_supabase().auth.get_user(token)
+    except Exception as error:
+        raise InvalidTokenError("Invalid or expired token") from error
+
+    user = get_value(response, "user")
+    safe_user = safe_user_info(user)
+    if not safe_user or not safe_user.get("id"):
+        raise InvalidTokenError("Invalid or expired token")
+
+    return safe_user

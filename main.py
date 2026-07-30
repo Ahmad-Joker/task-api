@@ -20,6 +20,7 @@ from auth import (
     signup_user,
     validate_email,
     validate_password,
+    verify_access_token,
 )
 
 
@@ -156,7 +157,7 @@ def public_info():
     description="Requires an Authorization: Bearer access token.",
 )
 def protected_profile(token: str = Depends(extract_bearer_token)):
-    return {"message": "Token received", "token_length": len(token)}
+    return verify_access_token(token)
 
 
 @app.get(
