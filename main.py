@@ -15,14 +15,12 @@ from auth import (
     AuthServiceError,
     InvalidCredentialsError,
     InvalidTokenError,
-    extract_bearer_token,
     get_current_user,
     login_user,
     logout_user,
     signup_user,
     validate_email,
     validate_password,
-    verify_access_token,
 )
 
 
