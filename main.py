@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 
-from database import initialize_database
+from database import get_all_tasks, get_task_by_id, initialize_database
 
 
 @asynccontextmanager
@@ -15,62 +15,13 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Task API",
     version="1.0",
-    description="A beginner-friendly SQLite-backed Task CRUD API built with FastAPI.",
+    description="A beginner-friendly PostgreSQL-backed Task CRUD API built with FastAPI.",
     lifespan=lifespan,
 )
 
 
-def get_connection():
-    connection = sqlite3.connect(DB_PATH)
-    connection.row_factory = sqlite3.Row
-    return connection
-
-
-def initialize_database():
-    with get_connection() as connection:
-        cursor = connection.cursor()
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS tasks (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                title TEXT NOT NULL,
-                done INTEGER NOT NULL DEFAULT 0
-            )
-            """
-        )
-        cursor.execute("SELECT COUNT(*) AS task_count FROM tasks")
-        task_count = cursor.fetchone()["task_count"]
-
-        if task_count == 0:
-            for task in STARTING_TASKS:
-                cursor.execute(
-                    "INSERT INTO tasks (title, done) VALUES (?, ?)",
-                    (task["title"], int(task["done"])),
-                )
-
-        connection.commit()
-
-
-def row_to_task(row):
-    return {
-        "id": row["id"],
-        "title": row["title"],
-        "done": bool(row["done"]),
-    }
-
-
 def find_task(task_id: int):
-    with get_connection() as connection:
-        cursor = connection.cursor()
-        cursor.execute(
-            "SELECT id, title, done FROM tasks WHERE id = ?",
-            (task_id,),
-        )
-        row = cursor.fetchone()
-
-    if row is None:
-        return None
-    return row_to_task(row)
+    return get_task_by_id(task_id)
 
 
 def task_not_found(task_id: int):
@@ -130,16 +81,11 @@ def read_health():
     "/tasks",
     tags=["Tasks"],
     summary="List all tasks",
-    description="Returns every task currently stored in the SQLite database.",
+    description="Returns every task currently stored in the PostgreSQL database.",
     response_description="Complete task list",
 )
 def read_tasks():
-    with get_connection() as connection:
-        cursor = connection.cursor()
-        cursor.execute("SELECT id, title, done FROM tasks")
-        rows = cursor.fetchall()
-
-    return [row_to_task(row) for row in rows]
+    return get_all_tasks()
 
 
 @app.get(

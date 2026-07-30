@@ -1,7 +1,10 @@
-import sqlite3
+import os
 
 from fastapi.testclient import TestClient
+import psycopg
 import pytest
+
+os.environ["DATABASE_URL"] = "postgresql://postgres:dev@localhost:5432/tasks_test"
 
 import main
 from main import app, initialize_database
@@ -9,11 +12,28 @@ from main import app, initialize_database
 
 client = TestClient(app)
 
+TEST_DATABASE_URL = os.environ["DATABASE_URL"]
+ADMIN_DATABASE_URL = "postgresql://postgres:dev@localhost:5432/tasks"
+
+
+def recreate_test_database():
+    with psycopg.connect(ADMIN_DATABASE_URL, autocommit=True) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT pg_terminate_backend(pid)
+                FROM pg_stat_activity
+                WHERE datname = %s AND pid <> pg_backend_pid()
+                """,
+                ("tasks_test",),
+            )
+            cursor.execute("DROP DATABASE IF EXISTS tasks_test")
+            cursor.execute("CREATE DATABASE tasks_test")
+
 
 @pytest.fixture(autouse=True)
-def use_temporary_database(tmp_path, monkeypatch):
-    test_db = tmp_path / "tasks.db"
-    monkeypatch.setattr(main, "DB_PATH", test_db)
+def use_test_database():
+    recreate_test_database()
     initialize_database()
 
 
@@ -35,53 +55,45 @@ def test_read_health():
     assert response.json() == {"status": "ok"}
 
 
-def test_database_file_is_created(tmp_path, monkeypatch):
-    test_db = tmp_path / "tasks.db"
-    monkeypatch.setattr(main, "DB_PATH", test_db)
-
+def test_database_connection_uses_environment_url():
     initialize_database()
 
-    assert test_db.exists()
+    assert main.initialize_database is initialize_database
 
 
-def test_tasks_table_is_created(tmp_path, monkeypatch):
-    test_db = tmp_path / "tasks.db"
-    monkeypatch.setattr(main, "DB_PATH", test_db)
-
+def test_tasks_table_is_created():
     initialize_database()
 
-    with sqlite3.connect(test_db) as connection:
-        cursor = connection.cursor()
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type = ? AND name = ?",
-            ("table", "tasks"),
-        )
-        assert cursor.fetchone() == ("tasks",)
+    with psycopg.connect(TEST_DATABASE_URL) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT table_name
+                FROM information_schema.tables
+                WHERE table_schema = %s AND table_name = %s
+                """,
+                ("public", "tasks"),
+            )
+            assert cursor.fetchone() == ("tasks",)
 
 
-def test_database_seeds_three_tasks_on_first_initialization(tmp_path, monkeypatch):
-    test_db = tmp_path / "tasks.db"
-    monkeypatch.setattr(main, "DB_PATH", test_db)
-
+def test_database_seeds_three_tasks_on_first_initialization():
     initialize_database()
 
-    with sqlite3.connect(test_db) as connection:
-        cursor = connection.cursor()
-        cursor.execute("SELECT COUNT(*) FROM tasks")
-        assert cursor.fetchone()[0] == 3
+    with psycopg.connect(TEST_DATABASE_URL) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT COUNT(*) FROM tasks")
+            assert cursor.fetchone()[0] == 3
 
 
-def test_database_reinitialization_does_not_duplicate_seeds(tmp_path, monkeypatch):
-    test_db = tmp_path / "tasks.db"
-    monkeypatch.setattr(main, "DB_PATH", test_db)
-
+def test_database_reinitialization_does_not_duplicate_seeds():
     initialize_database()
     initialize_database()
 
-    with sqlite3.connect(test_db) as connection:
-        cursor = connection.cursor()
-        cursor.execute("SELECT COUNT(*) FROM tasks")
-        assert cursor.fetchone()[0] == 3
+    with psycopg.connect(TEST_DATABASE_URL) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT COUNT(*) FROM tasks")
+            assert cursor.fetchone()[0] == 3
 
 
 def test_read_tasks():
@@ -124,13 +136,13 @@ def test_create_persists_task_across_database_connections():
 
     assert response.status_code == 201
 
-    with sqlite3.connect(main.DB_PATH) as connection:
-        cursor = connection.cursor()
-        cursor.execute(
-            "SELECT title, done FROM tasks WHERE id = ?",
-            (response.json()["id"],),
-        )
-        assert cursor.fetchone() == ("Buy milk", 0)
+    with psycopg.connect(TEST_DATABASE_URL) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT title, done FROM tasks WHERE id = %s",
+                (response.json()["id"],),
+            )
+            assert cursor.fetchone() == ("Buy milk", False)
 
 
 def test_create_task_with_missing_title():

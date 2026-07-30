@@ -68,3 +68,44 @@ def initialize_database(max_attempts=10, wait_seconds=2):
                 time.sleep(wait_seconds)
 
     raise RuntimeError("Could not connect to PostgreSQL after several attempts") from last_error
+
+
+def row_to_task(row):
+    if row is None:
+        return None
+    return {
+        "id": row["id"],
+        "title": row["title"],
+        "done": row["done"],
+    }
+
+
+def get_all_tasks():
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT id, title, done
+                FROM tasks
+                ORDER BY id
+                """
+            )
+            rows = cursor.fetchall()
+
+    return [row_to_task(row) for row in rows]
+
+
+def get_task_by_id(task_id):
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT id, title, done
+                FROM tasks
+                WHERE id = %s
+                """,
+                (task_id,),
+            )
+            row = cursor.fetchone()
+
+    return row_to_task(row)
