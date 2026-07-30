@@ -75,3 +75,66 @@ To create it:
    ```
 
 The database screenshot image is not committed until you create it manually.
+
+## PostgreSQL Data Screenshot
+
+Assignment A3 asks for a PostgreSQL data screenshot saved as:
+
+```text
+screenshots/postgres-data.png
+```
+
+You can capture this from `psql`, pgAdmin, or DBeaver.
+
+### Option 1: psql
+
+1. Start the stack:
+
+   ```bash
+   docker compose up -d --build
+   ```
+
+2. Open `psql` inside the PostgreSQL container:
+
+   ```bash
+   docker compose exec db psql -U postgres -d tasks
+   ```
+
+3. Run:
+
+   ```sql
+   \dt
+   SELECT * FROM tasks;
+   ```
+
+4. Take a screenshot showing the `tasks` table and task rows.
+
+5. Save it as:
+
+   ```text
+   screenshots/postgres-data.png
+   ```
+
+### Option 2: pgAdmin or DBeaver
+
+1. Connect to PostgreSQL using:
+
+   ```text
+   Host: localhost
+   Port: 5432
+   Database: tasks
+   User: postgres
+   Password: dev
+   ```
+
+2. Open the `tasks` table.
+
+3. Capture the visible rows.
+
+4. Save the image as:
+
+   ```text
+   screenshots/postgres-data.png
+   ```
+
+Do not claim the PostgreSQL screenshot exists until `screenshots/postgres-data.png` has actually been created.

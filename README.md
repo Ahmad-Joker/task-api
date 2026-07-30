@@ -1,86 +1,238 @@
 # Task API
 
-A beginner-friendly Task CRUD API for Backend Internship assignments. The API started as a Week 2 in-memory FastAPI project and was upgraded for Week 3 Assignment A2 to store tasks in a SQLite database named `tasks.db`.
+A beginner-friendly FastAPI Task CRUD API built across three backend assignments.
 
-The public API behavior stayed the same: the routes, request shapes, response shapes, validation rules, and status codes remain compatible with Assignment 1.
+Architecture progression:
+
+```text
+A1: Client -> FastAPI -> in-memory list
+A2: Client -> FastAPI -> SQLite tasks.db
+A3: Client -> FastAPI container -> PostgreSQL container
+```
+
+Assignment A3 upgrades the app to run as a Docker Compose stack with PostgreSQL persistence. The public API behavior stayed the same: routes, request bodies, response bodies, validation rules, and status codes remain compatible with A1 and A2.
 
 ## Features
 
 - Root and health-check endpoints
-- List all tasks
-- Get one task by ID
-- Create a new task
-- Update a task title, done status, or both
-- Delete a task
-- Clear JSON error messages
-- Interactive Swagger UI at `/docs`
-- Automated tests with Pytest and FastAPI TestClient
-- SQLite persistence across server restarts
-- Automatic database and table creation
-- Seed data only when the database is empty
+- Full task CRUD API
+- JSON error responses with an `error` key
+- Swagger UI at `/docs`
+- PostgreSQL-backed persistence
+- Automatic table creation
+- Seed data only when the table is empty
+- Docker Compose one-command startup
+- Pytest coverage for endpoints, validation, initialization, persistence, and SQL parameterization
 
 ## Technology Used
 
 - Python 3.10+
 - FastAPI
 - Uvicorn
+- PostgreSQL
+- psycopg 3
+- python-dotenv
+- Docker
+- Docker Compose
 - Pytest
 - FastAPI TestClient
-- Python's built-in `sqlite3` module
-- SQLite database file storage
 
 ## Project Structure
 
 ```text
 task-api/
 |-- main.py
+|-- database.py
 |-- requirements.txt
-|-- README.md
+|-- Dockerfile
+|-- compose.yaml
+|-- .env.example
 |-- .gitignore
-|-- tasks.db              # generated automatically and ignored by Git
+|-- README.md
 |-- tests/
+|   |-- conftest.py
 |   `-- test_api.py
 `-- screenshots/
-    `-- README.md
+    |-- README.md
+    |-- swagger-ui.png
+    `-- database-browser.png
 ```
 
-## Installation
+The real `.env` file and database files are ignored by Git.
 
-Clone or download this project, then open a terminal in the `task-api` folder.
+## Clean Clone Setup
 
-### Windows
+From a fresh clone, create your local environment file and start the stack.
+
+Windows PowerShell:
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\activate
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+Copy-Item .env.example .env
+docker compose up --build
 ```
 
-### macOS and Linux
+macOS and Linux:
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+cp .env.example .env
+docker compose up --build
 ```
 
-## Run the API
-
-Use this command from the project root:
-
-```bash
-uvicorn main:app --reload
-```
-
-When the API starts, it automatically creates `tasks.db` in the project root if the file does not already exist.
-
-## Local URLs
+The API will be available at:
 
 - API: http://localhost:8000
 - Swagger: http://localhost:8000/docs
 - ReDoc: http://localhost:8000/redoc
+
+## Docker Commands
+
+Start or rebuild the complete stack:
+
+```bash
+docker compose up --build
+```
+
+Start in the background:
+
+```bash
+docker compose up -d --build
+```
+
+Stop containers while keeping the PostgreSQL volume:
+
+```bash
+docker compose down
+```
+
+Destructive reset, including database volume deletion:
+
+```bash
+docker compose down -v
+```
+
+Use `docker compose down -v` only when you intentionally want to erase the PostgreSQL data.
+
+## Docker Concepts
+
+An image is the packaged blueprint for a service. The API image is built from the `Dockerfile`; the PostgreSQL image is pulled from Docker Hub.
+
+A container is a running instance of an image. In this project, Docker Compose runs one API container and one PostgreSQL container.
+
+## Dockerfile
+
+The API `Dockerfile`:
+
+1. Uses an official slim Python image.
+2. Sets `/app` as the working directory.
+3. Copies `requirements.txt` first for better build caching.
+4. Installs dependencies.
+5. Copies the application files.
+6. Exposes port `8000`.
+7. Runs Uvicorn on `0.0.0.0:8000`.
+
+## Compose Services
+
+`compose.yaml` defines two services:
+
+| Service | Purpose |
+| --- | --- |
+| `api` | Builds and runs the FastAPI app |
+| `db` | Runs PostgreSQL using the official `postgres:16` image |
+
+The API uses this internal Docker hostname:
+
+```text
+db
+```
+
+Inside Docker Compose, `DATABASE_URL` points to:
+
+```text
+postgresql://postgres:dev@db:5432/tasks
+```
+
+The `db` service has a healthcheck using `pg_isready`, and the `api` service waits for the database to become healthy before starting.
+
+## Environment Variables
+
+`.env.example` is safe to commit and documents the local development values:
+
+```text
+DATABASE_URL=postgresql://postgres:dev@localhost:5432/tasks
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=dev
+POSTGRES_DB=tasks
+```
+
+The real `.env` file is ignored by Git. Do not commit real secrets or production credentials.
+
+For local development outside Docker, `DATABASE_URL` should use `localhost`:
+
+```text
+postgresql://postgres:dev@localhost:5432/tasks
+```
+
+Inside Docker Compose, the API uses `db` as the host:
+
+```text
+postgresql://postgres:dev@db:5432/tasks
+```
+
+## PostgreSQL Schema
+
+The app creates this table automatically if it does not already exist:
+
+```sql
+CREATE TABLE IF NOT EXISTS tasks (
+    id SERIAL PRIMARY KEY,
+    title TEXT NOT NULL,
+    done BOOLEAN NOT NULL DEFAULT FALSE
+);
+```
+
+PostgreSQL stores `done` as a real boolean. API responses return JSON booleans: `false` or `true`.
+
+## Database Initialization
+
+On startup, the app:
+
+1. Reads `DATABASE_URL`.
+2. Connects to PostgreSQL with a retry loop.
+3. Creates the `tasks` table if missing.
+4. Counts existing rows.
+5. Seeds exactly three example tasks only when the table is empty.
+6. Commits changes.
+7. Closes connections safely.
+
+Restarting the API or containers does not duplicate seed data.
+
+Seed tasks:
+
+```text
+Learn FastAPI basics
+Write API tests
+Review Swagger docs
+```
+
+## Persistence
+
+PostgreSQL data is stored in the named Docker volume:
+
+```text
+taskdata
+```
+
+That means task data survives:
+
+- API container restarts
+- database container restarts
+- `docker compose down`
+
+Data is erased only when the volume is deleted, such as with:
+
+```bash
+docker compose down -v
+```
 
 ## Endpoints
 
@@ -106,16 +258,10 @@ When the API starts, it automatically creates `tasks.db` in the project root if 
 
 ## curl Examples
 
-List all tasks:
+List tasks:
 
 ```bash
 curl http://localhost:8000/tasks
-```
-
-Retrieve one task:
-
-```bash
-curl http://localhost:8000/tasks/1
 ```
 
 Create a task:
@@ -153,27 +299,15 @@ content-type: application/json
 {"status":"ok"}
 ```
 
-## Status Codes
-
-- `200 OK`: Successful read or update
-- `201 Created`: Task was created
-- `204 No Content`: Task was deleted and the response body is empty
-- `400 Bad Request`: Request JSON is missing required data or contains invalid values
-- `404 Not Found`: A task with the requested ID does not exist
-
 ## Validation
 
-The API manually validates create and update requests so assignment-required errors return `400` instead of FastAPI's default `422`.
-
-Validation rules:
-
-- `POST /tasks` requires a `title`.
+- `POST /tasks` requires a non-empty `title`.
+- `PUT /tasks/{task_id}` requires `title`, `done`, or both.
 - `title` must not be empty or whitespace-only.
-- `PUT /tasks/{task_id}` requires at least `title`, `done`, or both.
 - `done` must be a JSON boolean: `true` or `false`.
-- Unknown task IDs return a JSON `404` error.
+- Unknown task IDs return `404`.
 
-Manual error responses use this format:
+Manual errors use this format:
 
 ```json
 {
@@ -181,201 +315,126 @@ Manual error responses use this format:
 }
 ```
 
+## Parameterized Queries
+
+All SQL queries that include values use psycopg placeholders:
+
+```python
+cursor.execute(
+    "SELECT id, title, done FROM tasks WHERE id = %s",
+    (task_id,)
+)
+```
+
+The project does not use f-strings, string concatenation, or string formatting for SQL values.
+
 ## Testing
 
-Run the full test suite from the project root:
+Start PostgreSQL first:
+
+```bash
+docker compose up -d db
+```
+
+Then run:
 
 ```bash
 pytest
 ```
 
-The tests use temporary SQLite database files so one test cannot affect another and the real development `tasks.db` is not changed permanently.
+The tests use a separate PostgreSQL database named `tasks_test`. They recreate that test database during the test run so the normal development database is not modified destructively.
 
-## Week 3 Database Upgrade
+## Persistence Test Steps
 
-Assignment 1 used a simple Python list:
+1. Start the stack:
 
-```text
-Client -> API -> in-memory list
+   ```bash
+   docker compose up -d --build
+   ```
+
+2. Create a task:
+
+   ```bash
+   curl -X POST http://localhost:8000/tasks -H "Content-Type: application/json" -d "{\"title\":\"Persistent task\"}"
+   ```
+
+3. Stop the containers:
+
+   ```bash
+   docker compose down
+   ```
+
+4. Start the stack again:
+
+   ```bash
+   docker compose up -d
+   ```
+
+5. Confirm the task is still there:
+
+   ```bash
+   curl http://localhost:8000/tasks
+   ```
+
+## Inspecting PostgreSQL With psql
+
+Open a shell inside the database container:
+
+```bash
+docker compose exec db psql -U postgres -d tasks
 ```
 
-Assignment 2 uses SQLite:
-
-```text
-Client -> API -> SQLite tasks.db
-```
-
-SQLite was selected because it is perfect for a beginner backend assignment:
-
-- It stores the database in one file.
-- It does not require a separate database server.
-- It needs zero setup beyond Python.
-- Data survives server restarts.
-
-## Database Schema
-
-The app creates this table automatically:
+Useful commands:
 
 ```sql
-CREATE TABLE IF NOT EXISTS tasks (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    title TEXT NOT NULL,
-    done INTEGER NOT NULL DEFAULT 0
-);
-```
-
-SQLite stores `done` as `0` or `1`. API responses convert those values into real JSON booleans: `false` or `true`.
-
-## Automatic Database Initialization
-
-On startup, the app:
-
-1. Opens or creates `tasks.db`.
-2. Creates the `tasks` table if it does not exist.
-3. Counts existing rows.
-4. Seeds exactly three example tasks only when the table is empty.
-5. Commits changes.
-6. Closes the database connection safely.
-
-Restarting the server does not duplicate the three seed tasks.
-
-## Persistence
-
-Tasks are now stored in `tasks.db`, so created, updated, and deleted data remains after the server restarts.
-
-To demonstrate persistence:
-
-1. Start the API.
-2. Create a task with `POST /tasks`.
-3. Stop the server with `Ctrl + C`.
-4. Start the API again.
-5. Run `GET /tasks`.
-
-The task you created should still be present.
-
-## Database File
-
-The database file is located in the project root:
-
-```text
-tasks.db
-```
-
-This file is generated automatically and ignored by Git. A clean clone can run the app without manually creating the database.
-
-## Parameterized Queries
-
-All SQL queries that include values use parameterized placeholders. This keeps user input separate from SQL text.
-
-Example:
-
-```python
-cursor.execute("SELECT id, title, done FROM tasks WHERE id = ?", (task_id,))
-```
-
-The project does not build SQL with f-strings, string concatenation, or formatting for user-supplied values.
-
-## Swagger Screenshot
-
-The assignment asks for a Swagger UI screenshot saved at:
-
-```text
-screenshots/swagger-ui.png
-```
-
-This repository includes `screenshots/README.md` with step-by-step instructions for capturing and saving that screenshot.
-
-## DB Browser for SQLite
-
-Week 3 asks you to explore the generated SQLite database manually. DB Browser for SQLite is a beginner-friendly desktop app for opening `.db` files and running SQL.
-
-To inspect the database:
-
-1. Install DB Browser for SQLite from https://sqlitebrowser.org/.
-2. Start this API once so `tasks.db` is created.
-3. Open DB Browser for SQLite.
-4. Click **Open Database** and choose `tasks.db` from the project root.
-5. Open the **Browse Data** tab.
-6. Select the `tasks` table.
-7. Open the **Execute SQL** tab to run SQL queries.
-
-Useful SQL queries:
-
-```sql
+\dt
 SELECT * FROM tasks;
-```
-
-```sql
-SELECT * FROM tasks WHERE done = 1;
-```
-
-```sql
 SELECT COUNT(*) FROM tasks;
+SELECT * FROM tasks WHERE done = TRUE;
 ```
 
-```sql
-UPDATE tasks SET done = 1;
-```
-
-```sql
-DELETE FROM tasks WHERE done = 1;
-```
-
-The first three queries are safe read-only queries. The `UPDATE` and `DELETE` examples change data, so use them only on a temporary or demo database unless you mean to change your project database.
-
-Safe example:
-
-```sql
-SELECT COUNT(*) FROM tasks;
-```
-
-On a fresh database, this returns `3` because the app seeds exactly three example tasks when the table is empty.
-
-## Database Screenshot
-
-The Week 3 database screenshot should be saved at:
+Exit `psql`:
 
 ```text
-screenshots/database-browser.png
+\q
 ```
 
-This repository includes `screenshots/README.md` with exact steps for capturing it.
+## Screenshots
 
-## Assignment 1 Checklist
+Existing screenshots:
 
-- [x] Python 3.10+ FastAPI project
-- [x] Uvicorn run command
-- [x] Pytest test suite
-- [x] Original Week 2 implementation used no database or external storage
-- [x] Original Week 2 implementation used an in-memory task list
-- [x] Exactly three preloaded example tasks
-- [x] `GET /`
-- [x] `GET /health`
-- [x] `GET /tasks`
-- [x] `GET /tasks/{task_id}`
-- [x] `POST /tasks`
-- [x] `PUT /tasks/{task_id}`
-- [x] `DELETE /tasks/{task_id}`
-- [x] Manual JSON errors with `error` key
-- [x] Required status codes
-- [x] Swagger UI at `/docs`
-- [x] ReDoc at `/redoc`
-- [x] Screenshot instructions
-- [x] Beginner-friendly README
+- `screenshots/swagger-ui.png`
+- `screenshots/database-browser.png`
 
-## Assignment 2 Checklist
+Assignment A3 should include a PostgreSQL data screenshot at:
 
-- [x] Replaced in-memory storage with SQLite
-- [x] Uses Python's built-in `sqlite3` module
-- [x] Creates `tasks.db` automatically
-- [x] Creates the `tasks` table automatically
+```text
+screenshots/postgres-data.png
+```
+
+The screenshot can show `psql`, pgAdmin, or DBeaver displaying the `tasks` table rows. Instructions are in `screenshots/README.md`.
+
+## Assignment Completion Checklist
+
+- [x] Preserved A1 and A2 history
+- [x] Replaced final runtime SQLite storage with PostgreSQL
+- [x] Added psycopg 3
+- [x] Added python-dotenv
+- [x] Reads `DATABASE_URL` from environment
+- [x] Kept credentials out of Python source
+- [x] Added PostgreSQL connection retry loop
+- [x] Creates `tasks` table automatically
 - [x] Seeds exactly three tasks only when empty
-- [x] Does not duplicate seeds on restart
-- [x] Keeps endpoint behavior compatible with Assignment 1
-- [x] Converts SQLite `0` and `1` values to JSON booleans
-- [x] Uses parameterized SQL queries
-- [x] Tests use temporary databases
-- [x] `tasks.db` is ignored by Git
-- [x] Swagger remains available at `/docs`
-- [x] DB Browser instructions are documented
-- [x] Database screenshot instructions are documented
+- [x] Keeps endpoint behavior compatible with A1 and A2
+- [x] Uses parameterized SQL placeholders
+- [x] Added Dockerfile
+- [x] Added Compose `api` and `db` services
+- [x] Added PostgreSQL healthcheck
+- [x] API depends on healthy database
+- [x] Uses named volume `taskdata`
+- [x] Stack starts with `docker compose up --build`
+- [x] Tests pass
+- [x] Swagger works at `/docs`
+- [x] `.env` is ignored
+- [x] `.env.example` is tracked
+- [x] Screenshot instructions are documented
