@@ -1,19 +1,28 @@
 import os
+from urllib.parse import urlsplit
 
 from fastapi.testclient import TestClient
 import psycopg
 import pytest
+from dotenv import load_dotenv
+from psycopg import sql
 
-os.environ["DATABASE_URL"] = "postgresql://postgres:dev@localhost:5432/tasks_test"
+load_dotenv()
+
+ADMIN_DATABASE_URL = os.environ["DATABASE_URL"]
+TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
+if not TEST_DATABASE_URL:
+    parts = urlsplit(ADMIN_DATABASE_URL)
+    TEST_DATABASE_URL = ADMIN_DATABASE_URL[: -len(parts.path)] + "/tasks_test"
+
+TEST_DATABASE_NAME = urlsplit(TEST_DATABASE_URL).path.lstrip("/")
+os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 
 import main
 from main import app, initialize_database
 
 
 client = TestClient(app)
-
-TEST_DATABASE_URL = os.environ["DATABASE_URL"]
-ADMIN_DATABASE_URL = "postgresql://postgres:dev@localhost:5432/tasks"
 
 
 def recreate_test_database():
@@ -25,10 +34,18 @@ def recreate_test_database():
                 FROM pg_stat_activity
                 WHERE datname = %s AND pid <> pg_backend_pid()
                 """,
-                ("tasks_test",),
+                (TEST_DATABASE_NAME,),
             )
-            cursor.execute("DROP DATABASE IF EXISTS tasks_test")
-            cursor.execute("CREATE DATABASE tasks_test")
+            cursor.execute(
+                sql.SQL("DROP DATABASE IF EXISTS {}").format(
+                    sql.Identifier(TEST_DATABASE_NAME)
+                )
+            )
+            cursor.execute(
+                sql.SQL("CREATE DATABASE {}").format(
+                    sql.Identifier(TEST_DATABASE_NAME)
+                )
+            )
 
 
 @pytest.fixture(autouse=True)
