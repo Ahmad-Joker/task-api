@@ -1,17 +1,9 @@
-import sqlite3
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 
-STARTING_TASKS = [
-    {"id": 1, "title": "Learn FastAPI basics", "done": False},
-    {"id": 2, "title": "Write API tests", "done": False},
-    {"id": 3, "title": "Review Swagger docs", "done": True},
-]
-
-DB_PATH = Path(__file__).with_name("tasks.db")
+from database import initialize_database
 
 
 @asynccontextmanager
