@@ -16,7 +16,9 @@ from auth import (
     InvalidCredentialsError,
     InvalidTokenError,
     extract_bearer_token,
+    get_current_user,
     login_user,
+    logout_user,
     signup_user,
     validate_email,
     validate_password,
@@ -154,10 +156,35 @@ def public_info():
     "/protected/profile",
     tags=["Protected"],
     summary="Read protected profile",
-    description="Requires an Authorization: Bearer access token.",
+    description="Requires a valid Authorization: Bearer access token.",
 )
-def protected_profile(token: str = Depends(extract_bearer_token)):
-    return verify_access_token(token)
+def protected_profile(user=Depends(get_current_user)):
+    return user
+
+
+@app.get(
+    "/protected/dashboard",
+    tags=["Protected"],
+    summary="Read protected dashboard",
+    description="Uses the shared authentication dependency.",
+)
+def protected_dashboard(user=Depends(get_current_user)):
+    return {
+        "message": "Welcome to your dashboard",
+        "user_id": user["id"],
+    }
+
+
+@app.post(
+    "/auth/logout",
+    status_code=204,
+    tags=["Authentication"],
+    summary="Log out",
+    description="Requires a valid bearer token and signs out through Supabase.",
+)
+def logout(user=Depends(get_current_user)):
+    logout_user()
+    return Response(status_code=204)
 
 
 @app.get(

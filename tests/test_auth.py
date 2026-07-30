@@ -35,6 +35,7 @@ class FakeAuth:
         self.fail_signup = fail_signup
         self.fail_login = fail_login
         self.invalid_token = invalid_token
+        self.signed_out = False
 
     def sign_up(self, payload):
         if self.fail_signup:
@@ -52,6 +53,9 @@ class FakeAuth:
         if self.invalid_token or token != "valid-token":
             raise RuntimeError("invalid token")
         return SimpleNamespace(user=fake_user())
+
+    def sign_out(self):
+        self.signed_out = True
 
 
 class FakeSupabase:
@@ -226,3 +230,53 @@ def test_protected_profile_with_valid_token_returns_profile_data():
         "email": "test@example.com",
         "created_at": "2026-07-30T00:00:00Z",
     }
+
+
+def test_second_protected_route_uses_same_dependency():
+    response = client.get(
+        "/protected/dashboard",
+        headers={"Authorization": "Bearer valid-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "message": "Welcome to your dashboard",
+        "user_id": "user-123",
+    }
+
+
+def test_dashboard_rejects_invalid_token():
+    response = client.get(
+        "/protected/dashboard",
+        headers={"Authorization": "Bearer invalid-token"},
+    )
+
+    assert response.status_code == 401
+    assert response.json() == {"error": "Invalid or expired token"}
+
+
+def test_logout_without_token_returns_401():
+    response = client.post("/auth/logout")
+
+    assert response.status_code == 401
+    assert response.json() == {"error": "Access token required"}
+
+
+def test_logout_with_invalid_token_returns_401():
+    response = client.post(
+        "/auth/logout",
+        headers={"Authorization": "Bearer invalid-token"},
+    )
+
+    assert response.status_code == 401
+    assert response.json() == {"error": "Invalid or expired token"}
+
+
+def test_logout_with_valid_token_returns_204():
+    response = client.post(
+        "/auth/logout",
+        headers={"Authorization": "Bearer valid-token"},
+    )
+
+    assert response.status_code == 204
+    assert response.content == b""

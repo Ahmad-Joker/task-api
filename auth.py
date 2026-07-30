@@ -149,3 +149,14 @@ def verify_access_token(token):
         raise InvalidTokenError("Invalid or expired token")
 
     return safe_user
+
+
+def get_current_user(token: str = Depends(extract_bearer_token)):
+    return verify_access_token(token)
+
+
+def logout_user():
+    try:
+        get_supabase().auth.sign_out()
+    except Exception as error:
+        raise AuthServiceError("Could not log out user") from error
