@@ -280,3 +280,34 @@ def test_logout_with_valid_token_returns_204():
 
     assert response.status_code == 204
     assert response.content == b""
+
+
+def test_swagger_openapi_includes_bearer_security_scheme():
+    response = client.get("/openapi.json")
+    security_schemes = response.json()["components"]["securitySchemes"]
+
+    assert response.status_code == 200
+    assert "HTTPBearer" in security_schemes
+    assert security_schemes["HTTPBearer"]["scheme"] == "bearer"
+
+
+def test_protected_routes_contain_security_metadata():
+    openapi = client.get("/openapi.json").json()
+
+    assert openapi["paths"]["/protected/profile"]["get"]["security"] == [
+        {"HTTPBearer": []}
+    ]
+    assert openapi["paths"]["/protected/dashboard"]["get"]["security"] == [
+        {"HTTPBearer": []}
+    ]
+    assert openapi["paths"]["/auth/logout"]["post"]["security"] == [
+        {"HTTPBearer": []}
+    ]
+
+
+def test_public_and_auth_routes_do_not_require_security():
+    openapi = client.get("/openapi.json").json()
+
+    assert "security" not in openapi["paths"]["/public/info"]["get"]
+    assert "security" not in openapi["paths"]["/auth/signup"]["post"]
+    assert "security" not in openapi["paths"]["/auth/login"]["post"]
