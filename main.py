@@ -11,6 +11,14 @@ from database import (
     initialize_database,
     update_task as update_task_in_database,
 )
+from auth import (
+    AuthServiceError,
+    InvalidCredentialsError,
+    login_user,
+    signup_user,
+    validate_email,
+    validate_password,
+)
 
 
 @asynccontextmanager
@@ -56,6 +64,72 @@ def validate_title(title):
     if not isinstance(title, str) or title.strip() == "":
         return None
     return title.strip()
+
+
+def unauthorized(message: str):
+    return JSONResponse(status_code=401, content={"error": message})
+
+
+def validate_auth_body(body):
+    if body is None:
+        return None, None, bad_request("Email and password are required")
+
+    email = body.get("email")
+    password = body.get("password")
+
+    if email is None:
+        return None, None, bad_request("Email is required")
+    if password is None:
+        return None, None, bad_request("Password is required")
+
+    email = validate_email(email)
+    if email is None:
+        return None, None, bad_request("Valid email is required")
+
+    password = validate_password(password)
+    if password is None:
+        return None, None, bad_request("Password must be at least 8 characters")
+
+    return email, password, None
+
+
+@app.post(
+    "/auth/signup",
+    status_code=201,
+    tags=["Authentication"],
+    summary="Sign up",
+    description="Creates a Supabase Auth user with an email and password.",
+)
+async def signup(request: Request):
+    body = await read_json_body(request)
+    email, password, error = validate_auth_body(body)
+    if error is not None:
+        return error
+
+    try:
+        user = signup_user(email, password)
+    except AuthServiceError:
+        return bad_request("Could not sign up user")
+
+    return {"user": user}
+
+
+@app.post(
+    "/auth/login",
+    tags=["Authentication"],
+    summary="Log in",
+    description="Authenticates a Supabase Auth user and returns bearer tokens.",
+)
+async def login(request: Request):
+    body = await read_json_body(request)
+    email, password, error = validate_auth_body(body)
+    if error is not None:
+        return error
+
+    try:
+        return login_user(email, password)
+    except InvalidCredentialsError:
+        return unauthorized("Invalid login credentials")
 
 
 @app.get(

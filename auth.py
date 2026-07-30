@@ -86,3 +86,42 @@ def get_value(source, key):
     if isinstance(source, dict):
         return source.get(key)
     return getattr(source, key, None)
+
+
+def signup_user(email, password):
+    try:
+        response = get_supabase().auth.sign_up(
+            {"email": email, "password": password}
+        )
+    except Exception as error:
+        raise AuthServiceError("Could not sign up user") from error
+
+    user = get_value(response, "user")
+    if user is None:
+        raise AuthServiceError("Could not sign up user")
+
+    return safe_user_info(user)
+
+
+def login_user(email, password):
+    try:
+        response = get_supabase().auth.sign_in_with_password(
+            {"email": email, "password": password}
+        )
+    except Exception as error:
+        raise InvalidCredentialsError("Invalid login credentials") from error
+
+    session = get_value(response, "session")
+    user = get_value(response, "user")
+    access_token = get_value(session, "access_token")
+    refresh_token = get_value(session, "refresh_token")
+
+    if not access_token or not refresh_token:
+        raise InvalidCredentialsError("Invalid login credentials")
+
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "user": safe_user_info(user),
+    }
