@@ -242,15 +242,15 @@ def test_data_persists_across_separate_database_connections():
     create_response = client.post("/tasks", json={"title": "Persistent task"})
     task_id = create_response.json()["id"]
 
-    with sqlite3.connect(main.DB_PATH) as first_connection:
-        first_cursor = first_connection.cursor()
-        first_cursor.execute("SELECT title FROM tasks WHERE id = ?", (task_id,))
-        assert first_cursor.fetchone()[0] == "Persistent task"
+    with psycopg.connect(TEST_DATABASE_URL) as first_connection:
+        with first_connection.cursor() as first_cursor:
+            first_cursor.execute("SELECT title FROM tasks WHERE id = %s", (task_id,))
+            assert first_cursor.fetchone()[0] == "Persistent task"
 
-    with sqlite3.connect(main.DB_PATH) as second_connection:
-        second_cursor = second_connection.cursor()
-        second_cursor.execute("SELECT title FROM tasks WHERE id = ?", (task_id,))
-        assert second_cursor.fetchone()[0] == "Persistent task"
+    with psycopg.connect(TEST_DATABASE_URL) as second_connection:
+        with second_connection.cursor() as second_cursor:
+            second_cursor.execute("SELECT title FROM tasks WHERE id = %s", (task_id,))
+            assert second_cursor.fetchone()[0] == "Persistent task"
 
 
 def test_data_remains_after_reinitializing_database():
@@ -271,3 +271,14 @@ def test_swagger_and_openapi_are_accessible():
     assert docs_response.status_code == 200
     assert openapi_response.status_code == 200
     assert openapi_response.json()["info"]["title"] == "Task API"
+
+
+def test_repository_sql_uses_parameterized_placeholders():
+    database_source = open("database.py", encoding="utf-8").read()
+
+    assert "WHERE id = %s" in database_source
+    assert "VALUES (%s, %s)" in database_source
+    assert "WHERE id = ?" not in database_source
+    assert "VALUES (?, ?)" not in database_source
+    assert "execute(f\"" not in database_source
+    assert "execute(f'" not in database_source

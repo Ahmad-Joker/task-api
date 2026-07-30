@@ -109,3 +109,51 @@ def get_task_by_id(task_id):
             row = cursor.fetchone()
 
     return row_to_task(row)
+
+
+def create_task(title):
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO tasks (title, done)
+                VALUES (%s, %s)
+                RETURNING id, title, done
+                """,
+                (title, False),
+            )
+            row = cursor.fetchone()
+        connection.commit()
+
+    return row_to_task(row)
+
+
+def update_task(task_id, title, done):
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE tasks
+                SET title = %s, done = %s
+                WHERE id = %s
+                RETURNING id, title, done
+                """,
+                (title, done, task_id),
+            )
+            row = cursor.fetchone()
+        connection.commit()
+
+    return row_to_task(row)
+
+
+def delete_task(task_id):
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "DELETE FROM tasks WHERE id = %s",
+                (task_id,),
+            )
+            deleted_count = cursor.rowcount
+        connection.commit()
+
+    return deleted_count > 0

@@ -3,7 +3,14 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 
-from database import get_all_tasks, get_task_by_id, initialize_database
+from database import (
+    create_task as create_task_in_database,
+    delete_task as delete_task_from_database,
+    get_all_tasks,
+    get_task_by_id,
+    initialize_database,
+    update_task as update_task_in_database,
+)
 
 
 @asynccontextmanager
@@ -162,16 +169,7 @@ async def create_task(request: Request):
     if title is None:
         return bad_request("Title must not be empty")
 
-    with get_connection() as connection:
-        cursor = connection.cursor()
-        cursor.execute(
-            "INSERT INTO tasks (title, done) VALUES (?, ?)",
-            (title, 0),
-        )
-        task_id = cursor.lastrowid
-        connection.commit()
-
-    return {"id": task_id, "title": title, "done": False}
+    return create_task_in_database(title)
 
 
 @app.put(
@@ -248,15 +246,7 @@ async def update_task(task_id: int, request: Request):
             return bad_request("Done must be true or false")
         task["done"] = done
 
-    with get_connection() as connection:
-        cursor = connection.cursor()
-        cursor.execute(
-            "UPDATE tasks SET title = ?, done = ? WHERE id = ?",
-            (task["title"], int(task["done"]), task_id),
-        )
-        connection.commit()
-
-    return task
+    return update_task_in_database(task_id, task["title"], task["done"])
 
 
 @app.delete(
@@ -282,9 +272,5 @@ def delete_task(task_id: int):
     if task is None:
         return task_not_found(task_id)
 
-    with get_connection() as connection:
-        cursor = connection.cursor()
-        cursor.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
-        connection.commit()
-
+    delete_task_from_database(task_id)
     return Response(status_code=204)
