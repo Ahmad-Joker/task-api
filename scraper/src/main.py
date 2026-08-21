@@ -6,9 +6,10 @@ import json
 from pathlib import Path
 import re
 import time
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit, urlunsplit
 
 from bs4 import BeautifulSoup
+from pydantic import BaseModel, Field, ValidationError, field_validator
 import requests
 
 
@@ -18,7 +19,35 @@ USER_AGENT = "FlyRankInternship-A9/1.0 (+https://github.com/ahmad/task-api)"
 TIMEOUT_SECONDS = 10
 REQUEST_DELAY_SECONDS = 0.6
 CACHE_DIR = Path("cache")
+OUTPUT_DIR = Path("output")
 LAST_REQUEST_AT: float | None = None
+VALID_RATINGS = {"One", "Two", "Three", "Four", "Five"}
+
+
+class BookRecord(BaseModel):
+    title: str = Field(min_length=1)
+    product_url: str = Field(min_length=1)
+    price_text: str = Field(min_length=1)
+    price_gbp: float = Field(ge=0)
+    availability_text: str = Field(min_length=1)
+    rating_text: str = Field(min_length=1)
+    description: str | None
+    source_page: str = Field(min_length=1)
+    fetched_at: str = Field(min_length=1)
+
+    @field_validator("product_url", "source_page")
+    @classmethod
+    def require_books_url(cls, value: str) -> str:
+        if not value.startswith(BASE_URL):
+            raise ValueError("URL must stay within Books to Scrape")
+        return value
+
+    @field_validator("rating_text")
+    @classmethod
+    def require_known_rating(cls, value: str) -> str:
+        if value not in VALID_RATINGS:
+            raise ValueError("rating_text must be One, Two, Three, Four, or Five")
+        return value
 
 
 def fetch_with_cache(url: str, cache_path: Path) -> str:
@@ -122,7 +151,7 @@ def parse_book_detail(
 
     return {
         "title": title_node.get_text(strip=True) if title_node else "",
-        "product_url": product_url,
+        "product_url": canonicalize_url(product_url),
         "price_text": price_node.get_text(strip=True) if price_node else "",
         "availability_text": (
             availability_node.get_text(" ", strip=True) if availability_node else ""
@@ -133,9 +162,67 @@ def parse_book_detail(
         "description": description_node.get_text(" ", strip=True)
         if description_node
         else None,
-        "source_page": source_page,
+        "source_page": canonicalize_url(source_page),
         "fetched_at": fetched_at,
     }
+
+
+def canonicalize_url(url: str) -> str:
+    parts = urlsplit(url)
+    return urlunsplit(
+        (
+            parts.scheme.lower(),
+            parts.netloc.lower(),
+            parts.path,
+            "",
+            "",
+        )
+    )
+
+
+def normalize_price(price_text: str) -> float:
+    match = re.search(r"£\s*([0-9]+(?:\.[0-9]+)?)", price_text)
+    if not match:
+        raise ValueError(f"Could not parse GBP price from {price_text!r}")
+    return round(float(match.group(1)), 2)
+
+
+def validate_records(
+    raw_records: list[dict[str, str | None]],
+) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+    valid_records: list[dict[str, object]] = []
+    errors: list[dict[str, object]] = []
+    seen_urls: set[str] = set()
+
+    for raw_record in raw_records:
+        record = dict(raw_record)
+        product_url = canonicalize_url(str(record.get("product_url", "")))
+        if product_url in seen_urls:
+            continue
+        seen_urls.add(product_url)
+        record["product_url"] = product_url
+
+        try:
+            record["price_gbp"] = normalize_price(str(record.get("price_text", "")))
+            valid_records.append(BookRecord(**record).model_dump())
+        except (ValidationError, ValueError) as exc:
+            errors.append(
+                {
+                    "product_url": product_url,
+                    "error": str(exc),
+                    "raw_record": record,
+                }
+            )
+
+    return valid_records, errors
+
+
+def write_json(path: Path, payload: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
 
 
 def extract_book_details(book_entries: list[dict[str, str]]) -> list[dict[str, str | None]]:
@@ -165,7 +252,11 @@ def extract_book_details(book_entries: list[dict[str, str]]) -> list[dict[str, s
 
 def main() -> None:
     book_entries = discover_books(max_pages=3)
-    extract_book_details(book_entries)
+    raw_records = extract_book_details(book_entries)
+    valid_records, errors = validate_records(raw_records)
+    write_json(OUTPUT_DIR / "books.json", valid_records)
+    write_json(OUTPUT_DIR / "errors.json", errors)
+    print(f"valid_records={len(valid_records)}, invalid_records={len(errors)}")
 
 
 if __name__ == "__main__":
