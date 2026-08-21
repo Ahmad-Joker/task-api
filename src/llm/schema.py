@@ -52,3 +52,13 @@ def stub_triage_response() -> TriageOutput:
         confidence=0.4,
         reason="Stub mode returns the safe unsure response.",
     )
+
+
+def disabled_triage_response() -> TriageOutput:
+    return TriageOutput(
+        category=TriageCategory.other,
+        urgency=TriageUrgency.normal,
+        suggested_team=SuggestedTeam.support,
+        confidence=0.0,
+        reason="LLM is disabled by configuration.",
+    )

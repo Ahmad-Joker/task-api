@@ -1,6 +1,8 @@
 import json
 import os
 from pathlib import Path
+import random
+import time
 from typing import Any
 
 import httpx
@@ -14,6 +16,9 @@ PROMPT_VERSION = "triage-v1"
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PROMPT_PATH = PROJECT_ROOT / "prompts" / f"{PROMPT_VERSION}.md"
 QUARANTINE_PATH = PROJECT_ROOT / "logs" / "quarantine.jsonl"
+COST_LOG_PATH = PROJECT_ROOT / "logs" / "llm-cost.jsonl"
+MODEL_TIMEOUT_SECONDS = 30.0
+MAX_ATTEMPTS = 3
 
 
 class ModelOutputError(Exception):
@@ -21,6 +26,16 @@ class ModelOutputError(Exception):
         super().__init__(message)
         self.raw_output = raw_output
         self.validation_error = validation_error
+
+
+class ModelTimeoutError(Exception):
+    pass
+
+
+class ModelProviderError(Exception):
+    def __init__(self, message: str, status_code: int | None = None):
+        super().__init__(message)
+        self.status_code = status_code
 
 
 def load_prompt() -> str:
@@ -37,24 +52,90 @@ def build_messages(user_text: str, repair_instruction: str | None = None):
     return messages
 
 
+def retry_after_seconds(value: str | None) -> float | None:
+    if not value:
+        return None
+    try:
+        return max(0.0, float(value))
+    except ValueError:
+        return None
+
+
+def backoff_seconds(attempt_index: int, retry_after: str | None = None) -> float:
+    retry_after_value = retry_after_seconds(retry_after)
+    if retry_after_value is not None:
+        return retry_after_value
+    return (2 ** attempt_index) + random.uniform(0, 0.25)
+
+
+def write_cost_log(
+    model: str,
+    usage: dict[str, Any],
+    duration_ms: int,
+    repair_count: int,
+) -> None:
+    COST_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    log_line = {
+        "prompt_version": PROMPT_VERSION,
+        "model": model,
+        "input_tokens": usage.get("prompt_tokens", 0),
+        "output_tokens": usage.get("completion_tokens", 0),
+        "duration_ms": duration_ms,
+        "repair_count": repair_count,
+    }
+    with COST_LOG_PATH.open("a", encoding="utf-8") as file:
+        file.write(json.dumps(log_line, ensure_ascii=False) + "\n")
+
+
 def complete_triage_raw(user_text: str, repair_instruction: str | None = None) -> str:
     load_dotenv()
     base_url = os.environ["LLM_BASE_URL"].rstrip("/")
     api_key = os.environ["LLM_API_KEY"]
     model = os.environ["LLM_MODEL"]
+    payload = {
+        "model": model,
+        "messages": build_messages(user_text, repair_instruction),
+        "temperature": 0.2,
+    }
 
-    response = httpx.post(
-        f"{base_url}/chat/completions",
-        headers={"Authorization": f"Bearer {api_key}"},
-        json={
-            "model": model,
-            "messages": build_messages(user_text, repair_instruction),
-            "temperature": 0.2,
-        },
-        timeout=30.0,
-    )
-    response.raise_for_status()
-    return response.json()["choices"][0]["message"]["content"]
+    for attempt in range(MAX_ATTEMPTS):
+        started_at = time.monotonic()
+        try:
+            response = httpx.post(
+                f"{base_url}/chat/completions",
+                headers={"Authorization": f"Bearer {api_key}"},
+                json=payload,
+                timeout=MODEL_TIMEOUT_SECONDS,
+            )
+        except httpx.TimeoutException as exc:
+            if attempt < MAX_ATTEMPTS - 1:
+                time.sleep(backoff_seconds(attempt))
+                continue
+            raise ModelTimeoutError("Model request timed out") from exc
+
+        duration_ms = int((time.monotonic() - started_at) * 1000)
+        status_code = response.status_code
+        if status_code == 200:
+            data = response.json()
+            write_cost_log(
+                model=model,
+                usage=data.get("usage", {}),
+                duration_ms=duration_ms,
+                repair_count=1 if repair_instruction else 0,
+            )
+            return data["choices"][0]["message"]["content"]
+
+        if status_code == 429 or status_code >= 500:
+            if attempt < MAX_ATTEMPTS - 1:
+                time.sleep(backoff_seconds(attempt, response.headers.get("Retry-After")))
+                continue
+
+        raise ModelProviderError(
+            f"Model provider returned HTTP {status_code}",
+            status_code=status_code,
+        )
+
+    raise ModelProviderError("Model provider failed after retries")
 
 
 def extract_json_object(raw_text: str) -> str:

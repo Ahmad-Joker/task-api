@@ -1,4 +1,5 @@
 from fastapi.testclient import TestClient
+import httpx
 
 import main
 from main import app
@@ -111,3 +112,124 @@ def test_endpoint_returns_422_when_model_cannot_match_schema(monkeypatch):
 
     assert response.status_code == 422
     assert response.json() == {"error": "Model response did not match the triage schema"}
+
+
+def test_kill_switch_returns_fallback_without_model_call(monkeypatch):
+    monkeypatch.delenv("LLM_STUB", raising=False)
+    monkeypatch.setenv("LLM_ENABLED", "false")
+    monkeypatch.setattr(
+        main,
+        "complete_triage",
+        lambda _text: (_ for _ in ()).throw(AssertionError("model should not be called")),
+    )
+
+    response = client.post("/triage", json={"text": "My bill is wrong."})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "category": "other",
+        "urgency": "normal",
+        "suggested_team": "support",
+        "confidence": 0.0,
+        "reason": "LLM is disabled by configuration.",
+    }
+
+
+def test_timeout_returns_504(monkeypatch):
+    monkeypatch.delenv("LLM_STUB", raising=False)
+    monkeypatch.setenv("LLM_ENABLED", "true")
+    monkeypatch.setattr(
+        main,
+        "complete_triage",
+        lambda _text: (_ for _ in ()).throw(llm_client.ModelTimeoutError("timeout")),
+    )
+
+    response = client.post("/triage", json={"text": "The app is down."})
+
+    assert response.status_code == 504
+    assert response.json() == {"error": "Model request timed out"}
+
+
+class FakeResponse:
+    def __init__(self, status_code, payload=None, headers=None):
+        self.status_code = status_code
+        self._payload = payload or {}
+        self.headers = headers or {}
+
+    def json(self):
+        return self._payload
+
+
+def test_401_is_not_retried(monkeypatch):
+    calls = []
+    monkeypatch.setenv("LLM_BASE_URL", "https://example.test/v1")
+    monkeypatch.setenv("LLM_API_KEY", "bad-key")
+    monkeypatch.setenv("LLM_MODEL", "test-model")
+
+    def fake_post(*_args, **_kwargs):
+        calls.append(1)
+        return FakeResponse(401)
+
+    monkeypatch.setattr(llm_client.httpx, "post", fake_post)
+
+    try:
+        llm_client.complete_triage_raw("hello")
+    except llm_client.ModelProviderError as exc:
+        assert exc.status_code == 401
+    else:
+        raise AssertionError("Expected ModelProviderError")
+
+    assert len(calls) == 1
+
+
+def test_timeout_is_retried(monkeypatch):
+    calls = []
+    monkeypatch.setenv("LLM_BASE_URL", "https://example.test/v1")
+    monkeypatch.setenv("LLM_API_KEY", "key")
+    monkeypatch.setenv("LLM_MODEL", "test-model")
+    monkeypatch.setattr(llm_client.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(llm_client, "backoff_seconds", lambda *_args, **_kwargs: 0)
+
+    def fake_post(*_args, **_kwargs):
+        calls.append(1)
+        if len(calls) == 1:
+            raise httpx.TimeoutException("too slow")
+        return FakeResponse(
+            200,
+            {
+                "choices": [{"message": {"content": '{"category":"other","urgency":"normal","suggested_team":"support","confidence":0.4,"reason":"ok"}'}}],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 8},
+            },
+        )
+
+    monkeypatch.setattr(llm_client.httpx, "post", fake_post)
+
+    assert "category" in llm_client.complete_triage_raw("hello")
+    assert len(calls) == 2
+
+
+def test_successful_model_call_writes_cost_log(monkeypatch, tmp_path):
+    cost_log_path = tmp_path / "llm-cost.jsonl"
+    monkeypatch.setattr(llm_client, "COST_LOG_PATH", cost_log_path)
+    monkeypatch.setenv("LLM_BASE_URL", "https://example.test/v1")
+    monkeypatch.setenv("LLM_API_KEY", "key")
+    monkeypatch.setenv("LLM_MODEL", "test-model")
+    monkeypatch.setattr(
+        llm_client.httpx,
+        "post",
+        lambda *_args, **_kwargs: FakeResponse(
+            200,
+            {
+                "choices": [{"message": {"content": '{"category":"billing","urgency":"normal","suggested_team":"billing","confidence":0.9,"reason":"Billing issue."}'}}],
+                "usage": {"prompt_tokens": 12, "completion_tokens": 9},
+            },
+        ),
+    )
+
+    llm_client.complete_triage_raw("My invoice is wrong.")
+
+    log_text = cost_log_path.read_text(encoding="utf-8")
+    assert '"prompt_version": "triage-v1"' in log_text
+    assert '"model": "test-model"' in log_text
+    assert '"input_tokens": 12' in log_text
+    assert '"output_tokens": 9' in log_text

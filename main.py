@@ -24,8 +24,18 @@ from auth import (
     validate_email,
     validate_password,
 )
-from src.llm.client import ModelOutputError, complete_triage
-from src.llm.schema import TriageInput, TriageOutput, stub_triage_response
+from src.llm.client import (
+    ModelOutputError,
+    ModelProviderError,
+    ModelTimeoutError,
+    complete_triage,
+)
+from src.llm.schema import (
+    TriageInput,
+    TriageOutput,
+    disabled_triage_response,
+    stub_triage_response,
+)
 
 
 @asynccontextmanager
@@ -241,9 +251,21 @@ async def triage_message(request: Request):
     _ = triage_input
     if os.getenv("LLM_STUB") == "1":
         return stub_triage_response()
+    if os.getenv("LLM_ENABLED", "true").lower() == "false":
+        return disabled_triage_response()
 
     try:
         return complete_triage(triage_input.text)
+    except ModelTimeoutError:
+        return JSONResponse(
+            status_code=504,
+            content={"error": "Model request timed out"},
+        )
+    except ModelProviderError as exc:
+        return JSONResponse(
+            status_code=502,
+            content={"error": str(exc)},
+        )
     except ModelOutputError as exc:
         return JSONResponse(
             status_code=422,
