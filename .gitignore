@@ -12,3 +12,4 @@ tasks.db
 .env
 *.env.local
 logs/
+node_modules/

@@ -1,0 +1,20 @@
+{
+  "name": "background-job",
+  "version": "1.0.0",
+  "description": "A small Express and Inngest API for background report jobs.",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "inngest": "^3.22.12"
+  },
+  "devDependencies": {
+    "supertest": "^7.0.0",
+    "vitest": "^2.1.9"
+  }
+}
