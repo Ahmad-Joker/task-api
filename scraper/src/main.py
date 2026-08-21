@@ -1,6 +1,10 @@
 """Entry point for the Week 5 Books to Scrape assignment."""
 
+from datetime import datetime, timezone
+import hashlib
+import json
 from pathlib import Path
+import re
 import time
 from urllib.parse import urljoin
 
@@ -86,8 +90,82 @@ def discover_books(max_pages: int = 3) -> list[dict[str, str]]:
     return discovered
 
 
+def cache_name_for_product(product_url: str) -> str:
+    slug = product_url.rstrip("/").split("/")[-2]
+    safe_slug = re.sub(r"[^a-zA-Z0-9_-]+", "-", slug).strip("-")
+    digest = hashlib.sha1(product_url.encode("utf-8")).hexdigest()[:10]
+    return f"{safe_slug[:80]}-{digest}.html"
+
+
+def parse_rating_text(rating_classes: list[str]) -> str:
+    for class_name in rating_classes:
+        if class_name != "star-rating":
+            return class_name
+    return ""
+
+
+def parse_book_detail(
+    html: str,
+    product_url: str,
+    source_page: str,
+    fetched_at: str,
+) -> dict[str, str | None]:
+    soup = BeautifulSoup(html, "html.parser")
+    title_node = soup.select_one("div.product_main h1")
+    price_node = soup.select_one("div.product_main p.price_color")
+    availability_node = soup.select_one("div.product_main p.instock.availability")
+    rating_node = soup.select_one("div.product_main p.star-rating")
+    description_heading = soup.select_one("#product_description")
+    description_node = (
+        description_heading.find_next_sibling("p") if description_heading else None
+    )
+
+    return {
+        "title": title_node.get_text(strip=True) if title_node else "",
+        "product_url": product_url,
+        "price_text": price_node.get_text(strip=True) if price_node else "",
+        "availability_text": (
+            availability_node.get_text(" ", strip=True) if availability_node else ""
+        ),
+        "rating_text": parse_rating_text(rating_node.get("class", []))
+        if rating_node
+        else "",
+        "description": description_node.get_text(" ", strip=True)
+        if description_node
+        else None,
+        "source_page": source_page,
+        "fetched_at": fetched_at,
+    }
+
+
+def extract_book_details(book_entries: list[dict[str, str]]) -> list[dict[str, str | None]]:
+    records: list[dict[str, str | None]] = []
+    fetched_at = datetime.now(timezone.utc).isoformat()
+
+    for entry in book_entries:
+        product_url = entry["product_url"]
+        html = fetch_with_cache(
+            product_url,
+            CACHE_DIR / "books" / cache_name_for_product(product_url),
+        )
+        records.append(
+            parse_book_detail(
+                html=html,
+                product_url=product_url,
+                source_page=entry["source_page"],
+                fetched_at=fetched_at,
+            )
+        )
+
+    if records:
+        print(json.dumps(records[0], indent=2, ensure_ascii=False))
+    print(f"detail_pages={len(records)}")
+    return records
+
+
 def main() -> None:
-    discover_books(max_pages=3)
+    book_entries = discover_books(max_pages=3)
+    extract_book_details(book_entries)
 
 
 if __name__ == "__main__":
