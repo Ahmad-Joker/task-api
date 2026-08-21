@@ -60,6 +60,8 @@ task-api/
 
 The real `.env` file and database files are ignored by Git.
 
+Week 7 uses three provider environment variables, `LLM_BASE_URL`, `LLM_API_KEY`, and `LLM_MODEL`, so the same code can point at OpenRouter, Ollama, or another OpenAI-compatible service without hard-coding a provider.
+
 ## Clean Clone Setup
 
 From a fresh clone, create your local environment file and start the stack.
