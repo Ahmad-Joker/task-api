@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+:root {
+  --background: #090b0b;
+  --foreground: #f4f4f5;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+.react-flow__edge-textbg {
+  fill: #090b0b;
+}
+
+.react-flow__edge-text {
+  fill: #d4d4d8;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.react-flow__controls-button {
+  background: #09090b !important;
+  border-color: #27272a !important;
+  color: #f4f4f5 !important;
+}
+
+.react-flow__attribution {
+  background: rgba(9, 11, 11, 0.72) !important;
+  color: #a1a1aa !important;
+}
