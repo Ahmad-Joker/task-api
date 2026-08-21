@@ -1,0 +1,42 @@
+[
+  {
+    "name": "double charge",
+    "input": "I was charged twice for my subscription this month. Please refund the duplicate payment.",
+    "expected_category": "billing"
+  },
+  {
+    "name": "export crash",
+    "input": "Every time I click export, the dashboard crashes and I lose my report.",
+    "expected_category": "bug"
+  },
+  {
+    "name": "feature request",
+    "input": "Can you add dark mode and weekly PDF reports?",
+    "expected_category": "feature"
+  },
+  {
+    "name": "password reset",
+    "input": "I reset my password but still cannot log in to my account.",
+    "expected_category": "account"
+  },
+  {
+    "name": "urgent outage",
+    "input": "Our whole team cannot access the app and our client demo starts in 20 minutes.",
+    "expected_category": "bug"
+  },
+  {
+    "name": "vague help",
+    "input": "hello can someone help me",
+    "expected_category": "other"
+  },
+  {
+    "name": "ambiguous billing account",
+    "input": "I changed company names and now the invoice email is wrong.",
+    "expected_category": "billing"
+  },
+  {
+    "name": "unsure rule",
+    "input": "This thing is confusing.",
+    "expected_category": "other"
+  }
+]

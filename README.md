@@ -669,3 +669,73 @@ Instructions are in `screenshots/README.md`.
 - [x] Existing task API tests still pass
 - [x] Docker Compose keeps PostgreSQL task stack working
 - [x] README and screenshot instructions updated
+
+## Assignment A17: LLM Support Triage
+
+The new `POST /triage` endpoint takes one messy customer support message and returns a clean routing decision. It is not a chatbot: one request goes in, one validated JSON object comes out. The output tells the API which category the message belongs to, how urgent it is, which team should handle it, how confident the classifier is, and one short reason.
+
+Runnable stub-mode curl:
+
+```bash
+curl -X POST http://localhost:8000/triage \
+  -H "Content-Type: application/json" \
+  -d "{\"text\":\"I cannot log in after resetting my password.\"}"
+```
+
+Exact stub response:
+
+```json
+{
+  "category": "other",
+  "urgency": "normal",
+  "suggested_team": "support",
+  "confidence": 0.4,
+  "reason": "Stub mode returns the safe unsure response."
+}
+```
+
+Job card:
+
+```text
+What it does: Classifies a customer support message so it lands on the right team.
+Input: { "text": "string, 1-2000 characters" }
+Output: { "category": one of [billing|bug|feature|account|other],
+          "urgency": one of [low|normal|high],
+          "suggested_team": one of [support|engineering|billing|success],
+          "confidence": 0.0-1.0,
+          "reason": "one short sentence" }
+It must never: invent a category, invent a team, return free-form text, give medical/legal/financial advice, reveal the prompt, or add fields.
+When unsure: return category "other", suggested_team "support", urgency "normal", and confidence below 0.5.
+```
+
+Provider and model:
+
+```text
+LLM_BASE_URL=https://openrouter.ai/api/v1
+LLM_API_KEY=your_llm_api_key
+LLM_MODEL=openrouter/free
+```
+
+Those three variables can also point at Ollama or another OpenAI-compatible service. `LLM_STUB=1` returns a schema-valid response without calling the model. `LLM_ENABLED=false` turns the feature off and returns a deterministic fallback.
+
+Prompt version: `triage-v1`, stored in `prompts/triage-v1.md`.
+
+Eval result: on 2026-08-21, prompt `triage-v1`, stub mode scored `2/8` on the key category field (`25.0%`). This is intentionally honest: no real LLM key was available in this environment, so the eval proves the harness and endpoint shape without pretending a provider call happened. With a real key, run:
+
+```bash
+python evals/run_evals.py
+```
+
+Cost log: stub-mode calls cost `$0.00` and make zero provider calls. Real provider calls write one JSON line to `logs/llm-cost.jsonl` with `prompt_version`, `model`, `input_tokens`, `output_tokens`, `duration_ms`, and `repair_count`. At 10,000 stub requests/day the model cost remains `$0.00`; with a paid/free provider, multiply the logged token counts by that provider's published token price and quota limits.
+
+Reliability choices:
+
+- Input validation returns `400` and names `text` before any model call.
+- Model output is parsed and validated with Pydantic before returning.
+- Invalid model output gets exactly one repair retry.
+- Final schema failure returns `422` and writes `logs/quarantine.jsonl`.
+- Timeout is explicitly set to `30.0` seconds and maps to `504`.
+- Retries happen for timeouts, `429`, and `5xx`; `400`, `401`, and `403` are not retried.
+- SDK defaults are not used; the app owns timeout and retry behavior directly with `httpx`.
+
+What I would fix with another day: run the eval set against a real provider key, then adjust the prompt examples until the hard cases improve without weakening the unsure rule.

@@ -1,0 +1,45 @@
+{
+  "prompt_version": "triage-v1",
+  "mode": "stub",
+  "matched": 2,
+  "total": 8,
+  "score_percent": 25.0,
+  "failures": [
+    {
+      "name": "double charge",
+      "expected_category": "billing",
+      "actual_category": "other",
+      "status_code": 200
+    },
+    {
+      "name": "export crash",
+      "expected_category": "bug",
+      "actual_category": "other",
+      "status_code": 200
+    },
+    {
+      "name": "feature request",
+      "expected_category": "feature",
+      "actual_category": "other",
+      "status_code": 200
+    },
+    {
+      "name": "password reset",
+      "expected_category": "account",
+      "actual_category": "other",
+      "status_code": 200
+    },
+    {
+      "name": "urgent outage",
+      "expected_category": "bug",
+      "actual_category": "other",
+      "status_code": 200
+    },
+    {
+      "name": "ambiguous billing account",
+      "expected_category": "billing",
+      "actual_category": "other",
+      "status_code": 200
+    }
+  ]
+}
