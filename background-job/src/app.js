@@ -2,6 +2,7 @@ import express from "express";
 import { serve } from "inngest/express";
 import { inngest } from "./inngest/client.js";
 import { functions } from "./inngest/functions.js";
+import { createReport, getReport } from "./reports-store.js";
 
 export function createApp() {
   const app = express();
@@ -11,6 +12,34 @@ export function createApp() {
 
   app.get("/health", (_req, res) => {
     res.status(200).json({ status: "ok" });
+  });
+
+  app.post("/reports", async (req, res, next) => {
+    try {
+      const report = createReport(req.body.topic);
+
+      if (process.env.DISABLE_INNGEST_SEND !== "1") {
+        await inngest.send({
+          name: "report/requested",
+          data: { id: report.id, topic: report.topic },
+        });
+      }
+
+      res.status(202).json({ id: report.id, status: report.status });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/reports/:id", (req, res) => {
+    const report = getReport(req.params.id);
+
+    if (!report) {
+      res.status(404).json({ error: "Report not found" });
+      return;
+    }
+
+    res.status(200).json(report);
   });
 
   return app;
