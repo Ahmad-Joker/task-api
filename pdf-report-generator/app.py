@@ -3,6 +3,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, JSONResponse
+from pydantic import BaseModel
 
 from db import REPORTS_DIR, connect, initialize_database
 from renderer import render_pdf
@@ -14,6 +15,10 @@ app = FastAPI(
     version="1.0.0",
     description="Generate PDF reports from SQLite data and serve them by link.",
 )
+
+
+class CreateReportRequest(BaseModel):
+    force: bool = False
 
 
 @app.get("/health")
@@ -39,9 +44,31 @@ def get_report_row(report_id: int):
         ).fetchone()
 
 
-@app.post("/reports", status_code=201)
-def create_report():
+def get_today_report_row():
+    today = datetime.now().date().isoformat()
+    with connect() as connection:
+        return connection.execute(
+            """
+            SELECT id, path, created_at
+            FROM reports
+            WHERE substr(created_at, 1, 10) = ?
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (today,),
+        ).fetchone()
+
+
+@app.post("/reports")
+def create_report(body: CreateReportRequest | None = None):
     initialize_database()
+    force = body.force if body is not None else False
+
+    if not force:
+        existing = get_today_report_row()
+        if existing is not None:
+            return JSONResponse(status_code=200, content=report_to_response(existing))
+
     created_at = datetime.now().isoformat(timespec="seconds")
 
     with connect() as connection:
