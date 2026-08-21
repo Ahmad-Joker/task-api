@@ -1,5 +1,5 @@
 import { inngest } from "./client.js";
-import { failReport, finishReport } from "../reports-store.js";
+import { failReport, finishReport, getReportSummary } from "../reports-store.js";
 
 export const sayHello = inngest.createFunction(
   { id: "say-hello" },
@@ -30,4 +30,17 @@ export const makeReport = inngest.createFunction(
   },
 );
 
-export const functions = [sayHello, makeReport];
+export const heartbeat = inngest.createFunction(
+  { id: "heartbeat" },
+  { cron: "* * * * *" },
+  async ({ step }) => {
+    return step.run("log-report-summary", async () => {
+      const summary = getReportSummary();
+      const line = `heartbeat: pending=${summary.pending} done=${summary.done} failed=${summary.failed}`;
+      console.log(line);
+      return line;
+    });
+  },
+);
+
+export const functions = [sayHello, makeReport, heartbeat];

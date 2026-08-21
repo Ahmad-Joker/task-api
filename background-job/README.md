@@ -87,3 +87,17 @@ Invoke-RestMethod `
 Open the `make-report` run in the Inngest dashboard. It fails inside `build-report`, retries two more times, then ends `Failed` after 3 total attempts.
 
 Stage 3 sentence: missing topic is a bad request and should not be retried; `topic: "fail"` is accepted work that fails later, so the background worker retries it automatically.
+
+## Stage 4 Proof
+
+The `heartbeat` function runs from the cron expression `* * * * *`, which means every minute. In the dashboard, it should show one `log-report-summary` step per run and return a line like:
+
+```text
+heartbeat: pending=0 done=1 failed=1
+```
+
+Stage 4 sentences:
+
+`0 8 * * *` runs every day at 08:00.
+
+`0 22 * * 0` runs every Sunday at 22:00.

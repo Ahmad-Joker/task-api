@@ -22,6 +22,16 @@ export function listReports() {
   return Array.from(reports.values());
 }
 
+export function getReportSummary() {
+  return listReports().reduce(
+    (summary, report) => {
+      summary[report.status] += 1;
+      return summary;
+    },
+    { pending: 0, done: 0, failed: 0 },
+  );
+}
+
 export function finishReport(id, result) {
   const report = reports.get(id);
   if (!report) return undefined;
