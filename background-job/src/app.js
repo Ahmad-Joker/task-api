@@ -16,7 +16,14 @@ export function createApp() {
 
   app.post("/reports", async (req, res, next) => {
     try {
-      const report = createReport(req.body.topic);
+      const topic = typeof req.body.topic === "string" ? req.body.topic.trim() : "";
+
+      if (!topic) {
+        res.status(400).json({ error: "topic is required" });
+        return;
+      }
+
+      const report = createReport(topic);
 
       if (process.env.DISABLE_INNGEST_SEND !== "1") {
         await inngest.send({

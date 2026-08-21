@@ -59,3 +59,31 @@ Invoke-RestMethod http://localhost:3000/reports/generated-id
 ```
 
 The first response is `pending`; the later response is `done` with a generated `result`.
+
+## Stage 3 Proof
+
+Bad input is rejected at the door:
+
+```powershell
+Invoke-RestMethod `
+  -Uri "http://localhost:3000/reports" `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body '{}'
+```
+
+Expected response: `400 Bad Request` with `{"error":"topic is required"}`.
+
+To watch retries, create a report with the special topic:
+
+```powershell
+Invoke-RestMethod `
+  -Uri "http://localhost:3000/reports" `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body '{"topic":"fail"}'
+```
+
+Open the `make-report` run in the Inngest dashboard. It fails inside `build-report`, retries two more times, then ends `Failed` after 3 total attempts.
+
+Stage 3 sentence: missing topic is a bad request and should not be retried; `topic: "fail"` is accepted work that fails later, so the background worker retries it automatically.

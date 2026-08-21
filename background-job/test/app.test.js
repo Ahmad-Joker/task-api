@@ -43,4 +43,11 @@ describe("report endpoints", () => {
     expect(response.status).toBe(404);
     expect(response.body).toEqual({ error: "Report not found" });
   });
+
+  it("rejects missing topic before creating a report", async () => {
+    const response = await request(createApp()).post("/reports").send({});
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({ error: "topic is required" });
+  });
 });

@@ -36,6 +36,20 @@ export function finishReport(id, result) {
   return updated;
 }
 
+export function failReport(id, error) {
+  const report = reports.get(id);
+  if (!report) return undefined;
+
+  const updated = {
+    ...report,
+    status: "failed",
+    error,
+    updatedAt: new Date().toISOString(),
+  };
+  reports.set(id, updated);
+  return updated;
+}
+
 export function resetReports() {
   reports.clear();
 }

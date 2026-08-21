@@ -1,5 +1,5 @@
 import { inngest } from "./client.js";
-import { finishReport } from "../reports-store.js";
+import { failReport, finishReport } from "../reports-store.js";
 
 export const sayHello = inngest.createFunction(
   { id: "say-hello" },
@@ -11,7 +11,7 @@ export const sayHello = inngest.createFunction(
 );
 
 export const makeReport = inngest.createFunction(
-  { id: "make-report" },
+  { id: "make-report", retries: 2 },
   { event: "report/requested" },
   async ({ event, step }) => {
     const { id, topic } = event.data;
@@ -19,6 +19,11 @@ export const makeReport = inngest.createFunction(
     await step.sleep("do-the-slow-work", "8s");
 
     return step.run("build-report", async () => {
+      if (topic === "fail") {
+        failReport(id, "The report oven is broken!");
+        throw new Error("The report oven is broken!");
+      }
+
       const result = `Report for "${topic}": background work completed successfully.`;
       return finishReport(id, result);
     });
