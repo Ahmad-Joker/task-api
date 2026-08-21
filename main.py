@@ -23,7 +23,9 @@ from auth import (
     validate_email,
     validate_password,
 )
+from src.llm.client import PROMPT_VERSION, complete_triage_raw
 from src.llm.schema import TriageInput, TriageOutput, stub_triage_response
+import os
 
 
 @asynccontextmanager
@@ -224,7 +226,6 @@ def read_health():
     tags=["LLM"],
     summary="Triage a support message",
     description="Classifies a messy support message into a validated routing decision.",
-    response_model=TriageOutput,
 )
 async def triage_message(request: Request):
     body = await read_json_body(request)
@@ -237,7 +238,11 @@ async def triage_message(request: Request):
         return validation_bad_request(exc)
 
     _ = triage_input
-    return stub_triage_response()
+    if os.getenv("LLM_STUB") == "1":
+        return stub_triage_response()
+
+    raw_model_text = complete_triage_raw(triage_input.text)
+    return {"prompt_version": PROMPT_VERSION, "raw_model_text": raw_model_text}
 
 
 @app.get(
