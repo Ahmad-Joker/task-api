@@ -288,6 +288,42 @@ Delete a task:
 curl -X DELETE http://localhost:8000/tasks/1
 ```
 
+Triage a support message in stub mode:
+
+```bash
+curl -X POST http://localhost:8000/triage \
+  -H "Content-Type: application/json" \
+  -d "{\"text\":\"I cannot log in after resetting my password.\"}"
+```
+
+Expected stub response:
+
+```json
+{
+  "category": "other",
+  "urgency": "normal",
+  "suggested_team": "support",
+  "confidence": 0.4,
+  "reason": "Stub mode returns the safe unsure response."
+}
+```
+
+Deliberately broken triage request:
+
+```bash
+curl -X POST http://localhost:8000/triage \
+  -H "Content-Type: application/json" \
+  -d "{}"
+```
+
+Expected broken response:
+
+```json
+{
+  "error": "text: Field required"
+}
+```
+
 Example `curl -i` response:
 
 ```bash

@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse, Response
+from pydantic import ValidationError
 
 from database import (
     create_task as create_task_in_database,
@@ -22,6 +23,7 @@ from auth import (
     validate_email,
     validate_password,
 )
+from src.llm.schema import TriageInput, TriageOutput, stub_triage_response
 
 
 @asynccontextmanager
@@ -72,6 +74,12 @@ def validate_title(title):
     if not isinstance(title, str) or title.strip() == "":
         return None
     return title.strip()
+
+
+def validation_bad_request(exc: ValidationError):
+    first_error = exc.errors()[0]
+    field = ".".join(str(part) for part in first_error["loc"])
+    return bad_request(f"{field}: {first_error['msg']}")
 
 
 def unauthorized(message: str):
@@ -209,6 +217,27 @@ def read_root():
 )
 def read_health():
     return {"status": "ok"}
+
+
+@app.post(
+    "/triage",
+    tags=["LLM"],
+    summary="Triage a support message",
+    description="Classifies a messy support message into a validated routing decision.",
+    response_model=TriageOutput,
+)
+async def triage_message(request: Request):
+    body = await read_json_body(request)
+    if body is None:
+        return bad_request("text: Field required")
+
+    try:
+        triage_input = TriageInput.model_validate(body)
+    except ValidationError as exc:
+        return validation_bad_request(exc)
+
+    _ = triage_input
+    return stub_triage_response()
 
 
 @app.get(
