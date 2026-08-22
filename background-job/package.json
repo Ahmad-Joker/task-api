@@ -6,6 +6,9 @@
   "main": "src/server.js",
   "scripts": {
     "dev": "node --watch src/server.js",
+    "dev:3100": "node --watch src/server-3100.js",
+    "inngest:dev": "inngest-cli dev -u http://localhost:3000/api/inngest",
+    "inngest:dev:3100": "inngest-cli dev -u http://localhost:3100/api/inngest",
     "start": "node src/server.js",
     "test": "vitest run"
   },
@@ -14,6 +17,7 @@
     "inngest": "^3.22.12"
   },
   "devDependencies": {
+    "inngest-cli": "^1.43.0",
     "supertest": "^7.0.0",
     "vitest": "^2.1.9"
   }

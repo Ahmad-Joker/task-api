@@ -1,103 +1,141 @@
 # Background Job API
 
-A small Express API for Week 6: the endpoint accepts slow report work quickly, Inngest runs the work in the background, and clients poll for status.
+A small Week 6 Express API where slow report generation runs through Inngest instead of inside the HTTP request. `POST /reports` answers immediately with `202 Accepted`, Inngest builds the report in the background, and the client polls a status endpoint until the report is done.
 
 ## Run
 
+Install dependencies:
+
 ```powershell
 npm install
+```
+
+Terminal 1: start the API.
+
+```powershell
 npm run dev
 ```
 
-The API listens on `http://localhost:3000`.
-
-In a second terminal, start the Inngest Dev Server:
+Terminal 2: start the Inngest Dev Server.
 
 ```powershell
-npx inngest-cli@latest dev -u http://localhost:3000/api/inngest
+npm run inngest:dev
 ```
 
-Open the dashboard at `http://localhost:8288` and invoke `say-hello`.
+Open the dashboard at `http://localhost:8288`.
 
-## Stage 0 Proof
+If port `3000` is already busy, use the alternate local commands:
 
 ```powershell
-curl -i http://localhost:3000/health
+npm run dev:3100
+npm run inngest:dev:3100
 ```
 
-Expected response: `200 OK` with `{"status":"ok"}`.
+## Endpoints
 
-## Stage 1 Proof
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/health` | Confirms the API is running. |
+| `POST` | `/reports` | Accepts `{ "topic": "cats" }`, stores a pending report, sends `report/requested`, and returns `202` with the id. |
+| `GET` | `/reports/:id` | Returns the report status: first `pending`, later `done` with `result`, or `failed` if the background job failed. Unknown ids return `404`. |
 
-The Inngest dashboard should show `say-hello` running the `wait-five-seconds` step and finishing with `Hello from the background!`.
+## Inngest Functions
 
-## Stage 2 Proof
+| Function | Trigger | Purpose |
+| --- | --- | --- |
+| `say-hello` | Event `test/hello` | Sleeps for 5 seconds and returns a hello message. |
+| `make-report` | Event `report/requested` | Sleeps for 8 seconds, then builds the report in a durable `build-report` step. It retries twice for 3 total attempts. |
+| `heartbeat` | Cron `* * * * *` | Runs every minute and logs report counts for `pending`, `done`, and `failed`. |
 
-Create a report:
+## Proof
+
+Health check:
 
 ```powershell
-Invoke-RestMethod `
-  -Uri "http://localhost:3000/reports" `
+Invoke-RestMethod http://localhost:3100/health
+```
+
+Output:
+
+```json
+{"status":"ok"}
+```
+
+Fast report request and polling:
+
+```powershell
+$created = Invoke-RestMethod `
+  -Uri "http://localhost:3100/reports" `
   -Method Post `
   -ContentType "application/json" `
   -Body '{"topic":"cats"}'
+
+Invoke-RestMethod "http://localhost:3100/reports/$($created.id)"
+Start-Sleep -Seconds 20
+Invoke-RestMethod "http://localhost:3100/reports/$($created.id)"
 ```
 
-Expected immediate response:
+Output from my run:
 
-```json
-{
-  "id": "generated-id",
-  "status": "pending"
-}
+```text
+POST_MS=96
+{"id":"d8c58383-921c-48bd-b3c5-ee1e0b6b9523","status":"pending"}
+{"id":"d8c58383-921c-48bd-b3c5-ee1e0b6b9523","topic":"cats","status":"pending","createdAt":"2026-08-22T00:01:07.069Z","updatedAt":"2026-08-22T00:01:07.069Z"}
+{"id":"d8c58383-921c-48bd-b3c5-ee1e0b6b9523","topic":"cats","status":"done","createdAt":"2026-08-22T00:01:07.069Z","updatedAt":"2026-08-22T00:01:15.313Z","result":"Report for \"cats\": background work completed successfully."}
 ```
 
-Poll immediately, then again after about 10 seconds:
+Bad input:
 
 ```powershell
-Invoke-RestMethod http://localhost:3000/reports/generated-id
-```
-
-The first response is `pending`; the later response is `done` with a generated `result`.
-
-## Stage 3 Proof
-
-Bad input is rejected at the door:
-
-```powershell
-Invoke-RestMethod `
-  -Uri "http://localhost:3000/reports" `
+Invoke-WebRequest `
+  -Uri "http://localhost:3100/reports" `
   -Method Post `
   -ContentType "application/json" `
-  -Body '{}'
+  -Body "{}"
 ```
 
-Expected response: `400 Bad Request` with `{"error":"topic is required"}`.
+Output:
 
-To watch retries, create a report with the special topic:
+```text
+400
+{"error":"topic is required"}
+```
+
+Failed job:
 
 ```powershell
-Invoke-RestMethod `
-  -Uri "http://localhost:3000/reports" `
+$failed = Invoke-RestMethod `
+  -Uri "http://localhost:3100/reports" `
   -Method Post `
   -ContentType "application/json" `
   -Body '{"topic":"fail"}'
+
+Start-Sleep -Seconds 20
+Invoke-RestMethod "http://localhost:3100/reports/$($failed.id)"
 ```
 
-Open the `make-report` run in the Inngest dashboard. It fails inside `build-report`, retries two more times, then ends `Failed` after 3 total attempts.
+Output:
 
-Stage 3 sentence: missing topic is a bad request and should not be retried; `topic: "fail"` is accepted work that fails later, so the background worker retries it automatically.
-
-## Stage 4 Proof
-
-The `heartbeat` function runs from the cron expression `* * * * *`, which means every minute. In the dashboard, it should show one `log-report-summary` step per run and return a line like:
-
-```text
-heartbeat: pending=0 done=1 failed=1
+```json
+{"id":"c6b1bed9-b0b3-4fa4-b6f7-0187c47ce44e","topic":"fail","status":"failed","createdAt":"2026-08-22T00:01:37.976Z","updatedAt":"2026-08-22T00:01:46.142Z","error":"The report oven is broken!"}
 ```
 
-Stage 4 sentences:
+## Dashboard
 
-`0 8 * * *` runs every day at 08:00.
+The dashboard screenshot shows completed heartbeat cron runs, a completed `make-report`, and a failed `make-report` run.
 
-`0 22 * * 0` runs every Sunday at 22:00.
+![Inngest dashboard proof](docs/dashboard-screenshot.png)
+
+## Stage Sentences
+
+Stage 3: missing topic is a bad request and should not be retried; `topic: "fail"` is accepted work that fails later, so the background worker retries it automatically.
+
+Stage 4: `0 8 * * *` runs every day at 08:00.
+
+Stage 4: `0 22 * * 0` runs every Sunday at 22:00.
+
+## Tests
+
+```powershell
+npm test
+```
