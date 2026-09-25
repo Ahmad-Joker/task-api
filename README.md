@@ -1,70 +1,73 @@
 # Task API
 
-A beginner-friendly FastAPI Task CRUD API built across three backend assignments.
+A tested FastAPI backend that combines PostgreSQL task CRUD, Supabase authentication, and structured LLM support-message triage. The repository documents a staged backend-learning path while keeping each production concern explicit: persistence, authentication, schema validation, retries, evaluation, and Dockerized delivery.
 
-Architecture progression:
+> **Status:** Portfolio and training project. The core API is implemented and tested; provider-backed authentication and LLM calls require your own credentials.
 
-```text
-A1: Client -> FastAPI -> in-memory list
-A2: Client -> FastAPI -> SQLite tasks.db
-A3: Client -> FastAPI container -> PostgreSQL container
+## Problem and solution
+
+The project starts with a small task API and extends it into a realistic backend integration exercise. PostgreSQL provides durable storage, Supabase verifies users without storing passwords in the API, and `/triage` turns an unstructured support message into a validated routing decision instead of free-form model text.
+
+## Core capabilities
+
+- Task CRUD with PostgreSQL persistence and parameterized SQL.
+- Stable validation and JSON error responses.
+- Supabase signup, login, logout, profile, and protected dashboard routes.
+- Provider-neutral OpenAI-compatible LLM client.
+- Pydantic-validated triage output with one bounded repair attempt.
+- Explicit timeout and retry rules for `429`, `5xx`, and network failures.
+- Deterministic stub mode for local development and CI.
+- Prompt versioning, evaluation cases, quarantine logging, and cost logs.
+- Docker Compose stack with PostgreSQL health checks and a named volume.
+
+## Architecture
+
+```mermaid
+flowchart LR
+  Client --> API["FastAPI"]
+  API --> Tasks["Task routes"]
+  Tasks --> DB[(PostgreSQL)]
+  API --> Auth["Supabase Auth"]
+  API --> Triage["Structured triage service"]
+  Triage --> Provider["OpenAI-compatible provider"]
+  Triage --> Validate["Pydantic validation"]
 ```
 
-Assignment A3 upgrades the app to run as a Docker Compose stack with PostgreSQL persistence. The public API behavior stayed the same: routes, request bodies, response bodies, validation rules, and status codes remain compatible with A1 and A2.
+## Main API surface
 
-## Features
+| Method | Route | Purpose |
+| --- | --- | --- |
+| `GET` | `/health` | Service health |
+| `GET/POST` | `/tasks` | List or create tasks |
+| `GET/PUT/DELETE` | `/tasks/{task_id}` | Read, update, or delete one task |
+| `POST` | `/auth/signup` | Create a Supabase user |
+| `POST` | `/auth/login` | Obtain a verified session |
+| `POST` | `/auth/logout` | End the current session |
+| `GET` | `/protected/profile` | Read the verified user profile |
+| `GET` | `/protected/dashboard` | Example protected endpoint |
+| `POST` | `/triage` | Return a structured support-routing decision |
 
-- Root and health-check endpoints
-- Full task CRUD API
-- JSON error responses with an `error` key
-- Swagger UI at `/docs`
-- PostgreSQL-backed persistence
-- Automatic table creation
-- Seed data only when the table is empty
-- Docker Compose one-command startup
-- Pytest coverage for endpoints, validation, initialization, persistence, and SQL parameterization
+Interactive OpenAPI documentation is available at `/docs` while the API is running.
 
-## Technology Used
+## Technology stack
 
-- Python 3.10+
-- FastAPI
-- Uvicorn
-- PostgreSQL
-- psycopg 3
-- python-dotenv
-- Docker
-- Docker Compose
-- Pytest
-- FastAPI TestClient
+- Python 3.10+, FastAPI, Uvicorn, Pydantic
+- PostgreSQL and psycopg 3
+- Supabase Auth
+- HTTPX for provider calls
+- Docker and Docker Compose
+- pytest and FastAPI TestClient
 
-## Project Structure
+## Quick start
 
-```text
-task-api/
-|-- main.py
-|-- database.py
-|-- requirements.txt
-|-- Dockerfile
-|-- compose.yaml
-|-- .env.example
-|-- .gitignore
-|-- README.md
-|-- tests/
-|   |-- conftest.py
-|   `-- test_api.py
-`-- screenshots/
-    |-- README.md
-    |-- swagger-ui.png
-    `-- database-browser.png
+Requirements: Docker Desktop with Compose.
+
+```bash
+git clone https://github.com/Ahmad-Joker/task-api.git
+cd task-api
+cp .env.example .env
+docker compose up --build
 ```
-
-The real `.env` file and database files are ignored by Git.
-
-Week 7 uses three provider environment variables, `LLM_BASE_URL`, `LLM_API_KEY`, and `LLM_MODEL`, so the same code can point at OpenRouter, Ollama, or another OpenAI-compatible service without hard-coding a provider.
-
-## Clean Clone Setup
-
-From a fresh clone, create your local environment file and start the stack.
 
 Windows PowerShell:
 
@@ -73,669 +76,80 @@ Copy-Item .env.example .env
 docker compose up --build
 ```
 
-macOS and Linux:
+Open:
 
-```bash
-cp .env.example .env
-docker compose up --build
-```
+- API: [http://localhost:8000](http://localhost:8000)
+- Swagger UI: [http://localhost:8000/docs](http://localhost:8000/docs)
 
-The API will be available at:
+Stub mode is enabled by default, so `/triage` returns a valid deterministic fallback without making a provider call.
 
-- API: http://localhost:8000
-- Swagger: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
+## Configuration
 
-## Docker Commands
-
-Start or rebuild the complete stack:
-
-```bash
-docker compose up --build
-```
-
-Start in the background:
-
-```bash
-docker compose up -d --build
-```
-
-Stop containers while keeping the PostgreSQL volume:
-
-```bash
-docker compose down
-```
-
-Destructive reset, including database volume deletion:
-
-```bash
-docker compose down -v
-```
-
-Use `docker compose down -v` only when you intentionally want to erase the PostgreSQL data.
-
-## Docker Concepts
-
-An image is the packaged blueprint for a service. The API image is built from the `Dockerfile`; the PostgreSQL image is pulled from Docker Hub.
-
-A container is a running instance of an image. In this project, Docker Compose runs one API container and one PostgreSQL container.
-
-## Dockerfile
-
-The API `Dockerfile`:
-
-1. Uses an official slim Python image.
-2. Sets `/app` as the working directory.
-3. Copies `requirements.txt` first for better build caching.
-4. Installs dependencies.
-5. Copies the application files.
-6. Exposes port `8000`.
-7. Runs Uvicorn on `0.0.0.0:8000`.
-
-## Compose Services
-
-`compose.yaml` defines two services:
-
-| Service | Purpose |
+| Variable | Purpose |
 | --- | --- |
-| `api` | Builds and runs the FastAPI app |
-| `db` | Runs PostgreSQL using the official `postgres:16` image |
+| `DATABASE_URL` | PostgreSQL connection used by the API |
+| `TEST_DATABASE_URL` | Isolated PostgreSQL database for CRUD tests |
+| `SUPABASE_URL` | Supabase project URL |
+| `SUPABASE_KEY` | Supabase anon/public key; never use `service_role` here |
+| `LLM_BASE_URL` | OpenAI-compatible provider base URL |
+| `LLM_API_KEY` | Provider API key |
+| `LLM_MODEL` | Provider model identifier |
+| `LLM_STUB` | `1` enables deterministic no-network responses |
+| `LLM_ENABLED` | Disables the integration when set to `false` |
 
-The API uses this internal Docker hostname:
-
-```text
-db
-```
-
-Inside Docker Compose, `DATABASE_URL` points to:
-
-```text
-postgresql://postgres:dev@db:5432/tasks
-```
-
-The `db` service has a healthcheck using `pg_isready`, and the `api` service waits for the database to become healthy before starting.
-
-## Environment Variables
-
-`.env.example` is safe to commit and documents the local development values:
-
-```text
-DATABASE_URL=postgresql://postgres:dev@localhost:5432/tasks
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=dev
-POSTGRES_DB=tasks
-```
-
-The real `.env` file is ignored by Git. Do not commit real secrets or production credentials.
-
-For local development outside Docker, `DATABASE_URL` should use `localhost`:
-
-```text
-postgresql://postgres:dev@localhost:5432/tasks
-```
-
-Inside Docker Compose, the API uses `db` as the host:
-
-```text
-postgresql://postgres:dev@db:5432/tasks
-```
-
-## PostgreSQL Schema
-
-The app creates this table automatically if it does not already exist:
-
-```sql
-CREATE TABLE IF NOT EXISTS tasks (
-    id SERIAL PRIMARY KEY,
-    title TEXT NOT NULL,
-    done BOOLEAN NOT NULL DEFAULT FALSE
-);
-```
-
-PostgreSQL stores `done` as a real boolean. API responses return JSON booleans: `false` or `true`.
-
-## Database Initialization
-
-On startup, the app:
-
-1. Reads `DATABASE_URL`.
-2. Connects to PostgreSQL with a retry loop.
-3. Creates the `tasks` table if missing.
-4. Counts existing rows.
-5. Seeds exactly three example tasks only when the table is empty.
-6. Commits changes.
-7. Closes connections safely.
-
-Restarting the API or containers does not duplicate seed data.
-
-Seed tasks:
-
-```text
-Learn FastAPI basics
-Write API tests
-Review Swagger docs
-```
-
-## Persistence
-
-PostgreSQL data is stored in the named Docker volume:
-
-```text
-taskdata
-```
-
-That means task data survives:
-
-- API container restarts
-- database container restarts
-- `docker compose down`
-
-Data is erased only when the volume is deleted, such as with:
-
-```bash
-docker compose down -v
-```
-
-## Endpoints
-
-| Method | Route | Purpose | Success Status |
-| --- | --- | --- | --- |
-| GET | `/` | Show API information | 200 |
-| GET | `/health` | Check API health | 200 |
-| GET | `/tasks` | List all tasks | 200 |
-| GET | `/tasks/{task_id}` | Get one task | 200 |
-| POST | `/tasks` | Create a task | 201 |
-| PUT | `/tasks/{task_id}` | Update a task | 200 |
-| DELETE | `/tasks/{task_id}` | Delete a task | 204 |
-
-## Example Task
-
-```json
-{
-  "id": 1,
-  "title": "Buy milk",
-  "done": false
-}
-```
-
-## curl Examples
-
-List tasks:
-
-```bash
-curl http://localhost:8000/tasks
-```
-
-Create a task:
-
-```bash
-curl -X POST http://localhost:8000/tasks \
-  -H "Content-Type: application/json" \
-  -d "{\"title\":\"Buy milk\"}"
-```
-
-Update a task:
-
-```bash
-curl -X PUT http://localhost:8000/tasks/1 \
-  -H "Content-Type: application/json" \
-  -d "{\"title\":\"Buy oat milk\",\"done\":true}"
-```
-
-Delete a task:
-
-```bash
-curl -X DELETE http://localhost:8000/tasks/1
-```
-
-Triage a support message in stub mode:
-
-```bash
-curl -X POST http://localhost:8000/triage \
-  -H "Content-Type: application/json" \
-  -d "{\"text\":\"I cannot log in after resetting my password.\"}"
-```
-
-Expected stub response:
-
-```json
-{
-  "category": "other",
-  "urgency": "normal",
-  "suggested_team": "support",
-  "confidence": 0.4,
-  "reason": "Stub mode returns the safe unsure response."
-}
-```
-
-Deliberately broken triage request:
-
-```bash
-curl -X POST http://localhost:8000/triage \
-  -H "Content-Type: application/json" \
-  -d "{}"
-```
-
-Expected broken response:
-
-```json
-{
-  "error": "text: Field required"
-}
-```
-
-Example `curl -i` response:
-
-```bash
-curl -i http://localhost:8000/health
-```
-
-```text
-HTTP/1.1 200 OK
-content-type: application/json
-
-{"status":"ok"}
-```
-
-## Validation
-
-- `POST /tasks` requires a non-empty `title`.
-- `PUT /tasks/{task_id}` requires `title`, `done`, or both.
-- `title` must not be empty or whitespace-only.
-- `done` must be a JSON boolean: `true` or `false`.
-- Unknown task IDs return `404`.
-
-Manual errors use this format:
-
-```json
-{
-  "error": "Human-readable message"
-}
-```
-
-## Parameterized Queries
-
-All SQL queries that include values use psycopg placeholders:
-
-```python
-cursor.execute(
-    "SELECT id, title, done FROM tasks WHERE id = %s",
-    (task_id,)
-)
-```
-
-The project does not use f-strings, string concatenation, or string formatting for SQL values.
+Real `.env` files, tokens, logs, and local database files are ignored by Git.
 
 ## Testing
 
-Start PostgreSQL first:
+Create a virtual environment and install dependencies:
 
-```bash
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python -m pip install -r requirements.txt
+```
+
+Run the authentication and LLM tests without external services:
+
+```powershell
+.\.venv\Scripts\python -m pytest -q tests\test_auth.py tests\test_triage.py
+```
+
+Run the PostgreSQL CRUD suite after starting the database and loading `.env`:
+
+```powershell
 docker compose up -d db
+.\.venv\Scripts\python -m pytest -q tests\test_api.py
 ```
 
-Then run:
+The root repository also contains separate training modules with their own dependencies and test commands. Run those from their directories instead of using an unscoped root-level `pytest` command:
 
-```bash
-pytest
-```
+- `background-job/`
+- `scraper/`
+- `pdf-report-generator/`
+- `visual-ai-workflow-system/`
 
-The tests use a separate PostgreSQL database named `tasks_test`. They recreate that test database during the test run so the normal development database is not modified destructively.
+## Structured triage contract
 
-## Persistence Test Steps
-
-1. Start the stack:
-
-   ```bash
-   docker compose up -d --build
-   ```
-
-2. Create a task:
-
-   ```bash
-   curl -X POST http://localhost:8000/tasks -H "Content-Type: application/json" -d "{\"title\":\"Persistent task\"}"
-   ```
-
-3. Stop the containers:
-
-   ```bash
-   docker compose down
-   ```
-
-4. Start the stack again:
-
-   ```bash
-   docker compose up -d
-   ```
-
-5. Confirm the task is still there:
-
-   ```bash
-   curl http://localhost:8000/tasks
-   ```
-
-## Inspecting PostgreSQL With psql
-
-Open a shell inside the database container:
-
-```bash
-docker compose exec db psql -U postgres -d tasks
-```
-
-Useful commands:
-
-```sql
-\dt
-SELECT * FROM tasks;
-SELECT COUNT(*) FROM tasks;
-SELECT * FROM tasks WHERE done = TRUE;
-```
-
-Exit `psql`:
-
-```text
-\q
-```
-
-## Screenshots
-
-Existing screenshots:
-
-- `screenshots/swagger-ui.png`
-- `screenshots/database-browser.png`
-
-Assignment A3 should include a PostgreSQL data screenshot at:
-
-```text
-screenshots/postgres-data.png
-```
-
-The screenshot can show `psql`, pgAdmin, or DBeaver displaying the `tasks` table rows. Instructions are in `screenshots/README.md`.
-
-## Assignment Completion Checklist
-
-- [x] Preserved A1 and A2 history
-- [x] Replaced final runtime SQLite storage with PostgreSQL
-- [x] Added psycopg 3
-- [x] Added python-dotenv
-- [x] Reads `DATABASE_URL` from environment
-- [x] Kept credentials out of Python source
-- [x] Added PostgreSQL connection retry loop
-- [x] Creates `tasks` table automatically
-- [x] Seeds exactly three tasks only when empty
-- [x] Keeps endpoint behavior compatible with A1 and A2
-- [x] Uses parameterized SQL placeholders
-- [x] Added Dockerfile
-- [x] Added Compose `api` and `db` services
-- [x] Added PostgreSQL healthcheck
-- [x] API depends on healthy database
-- [x] Uses named volume `taskdata`
-- [x] Stack starts with `docker compose up --build`
-- [x] Tests pass
-- [x] Swagger works at `/docs`
-- [x] `.env` is ignored
-- [x] `.env.example` is tracked
-- [x] Screenshot instructions are documented
-
-## Assignment A4: Supabase Authentication
-
-Assignment A4 adds Supabase Auth to the existing Task API. Supabase is the Identity Provider: it stores users, hashes passwords, signs JSON Web Tokens, and verifies tokens for protected routes.
-
-Authentication architecture:
-
-```text
-Client -> FastAPI -> Supabase Auth
-Client -> FastAPI -> PostgreSQL tasks database
-```
-
-The task CRUD API remains available, and the new auth routes add sign up, login, bearer-token protection, dashboard access, and logout.
-
-## Authentication Concepts
-
-An Identity Provider is a trusted service that manages user identity. This project uses Supabase Auth so the API does not store passwords, hash passwords, or implement custom cryptography.
-
-A JWT is a signed token that represents a verified user session. The API does not trust a token just because it can be decoded; it asks Supabase to verify it with `get_user(token)`.
-
-An access token is the short-lived bearer token sent in the `Authorization` header.
-
-A refresh token is returned by login so a client can request a new access token later. Do not log it or commit it.
-
-Bearer authentication means requests include:
-
-```text
-Authorization: Bearer <access_token>
-```
-
-`401 Unauthorized` means authentication is missing, malformed, invalid, or expired. `403 Forbidden` is for a valid user who is authenticated but not allowed to perform an action. This assignment uses `401` for authentication failures.
-
-## Supabase Setup
-
-1. Create a free Supabase project at https://supabase.com/.
-2. Open **Project Settings -> API**.
-3. Copy the Project URL.
-4. Copy the anon/public key.
-5. Never copy or use the `service_role` key in this project.
-6. Add the values to `.env`:
-
-   ```text
-   SUPABASE_URL=your_project_url
-   SUPABASE_KEY=your_anon_key
-   ```
-
-7. For this practice assignment, open **Authentication -> Sign In / Providers -> Email** and disable email confirmation if immediate login is required.
-8. In production, keep email confirmation enabled.
-
-The real `.env` file is ignored by Git. `.env.example` contains placeholders only.
-
-## A4 API Reference
-
-| Method | Route | Purpose | Auth Required | Success Code |
-| --- | --- | --- | --- | --- |
-| POST | `/auth/signup` | Create a Supabase user | No | 201 |
-| POST | `/auth/login` | Log in and receive tokens | No | 200 |
-| POST | `/auth/logout` | Log out current user | Yes | 204 |
-| GET | `/public/info` | Public info | No | 200 |
-| GET | `/protected/profile` | Current user profile | Yes | 200 |
-| GET | `/protected/dashboard` | Protected dashboard | Yes | 200 |
-| GET | `/` | API info | No | 200 |
-| GET | `/health` | Health check | No | 200 |
-| GET | `/tasks` | List tasks | No | 200 |
-| POST | `/tasks` | Create task | No | 201 |
-| PUT | `/tasks/{task_id}` | Update task | No | 200 |
-| DELETE | `/tasks/{task_id}` | Delete task | No | 204 |
-
-## Auth curl Examples
-
-Sign up:
-
-```bash
-curl -i -X POST http://localhost:8000/auth/signup \
-  -H "Content-Type: application/json" \
-  -d "{\"email\":\"test@example.com\",\"password\":\"password123\"}"
-```
-
-Log in:
-
-```bash
-curl -i -X POST http://localhost:8000/auth/login \
-  -H "Content-Type: application/json" \
-  -d "{\"email\":\"test@example.com\",\"password\":\"password123\"}"
-```
-
-Protected profile:
-
-```bash
-curl -i http://localhost:8000/protected/profile \
-  -H "Authorization: Bearer <access_token>"
-```
-
-Tampered-token failure:
-
-```bash
-curl -i http://localhost:8000/protected/profile \
-  -H "Authorization: Bearer changed.invalid.token"
-```
-
-Expected result:
+Input:
 
 ```json
-{
-  "error": "Invalid or expired token"
-}
+{ "text": "I cannot log in after resetting my password." }
 ```
 
-Logout:
+Output fields are constrained to `category`, `urgency`, `suggested_team`, `confidence`, and `reason`. Invalid model output is repaired once, then rejected and quarantined rather than returned as trusted data. Prompt version `triage-v1` lives in `prompts/triage-v1.md`; evaluation cases and results live in `evals/`.
 
-```bash
-curl -i -X POST http://localhost:8000/auth/logout \
-  -H "Authorization: Bearer <access_token>"
-```
+## Security and reliability choices
 
-## Swagger Authorization
+- Passwords remain with Supabase; the API does not store or hash them.
+- Bearer tokens are verified through Supabase rather than trusted after decoding.
+- SQL statements use parameterized placeholders.
+- LLM output is schema-validated before reaching clients.
+- Retryable and non-retryable provider failures are handled separately.
+- Secrets and generated logs are excluded from version control.
 
-1. Start the app.
-2. Open http://localhost:8000/docs.
-3. Sign up and log in using the public auth routes.
-4. Copy the `access_token` from the login response.
-5. Click **Authorize**.
-6. Paste the token.
-7. Call `/protected/profile` or `/protected/dashboard`.
+## Limitations
 
-Protected routes show lock icons because FastAPI's `HTTPBearer` dependency is configured in OpenAPI.
-
-## A4 Testing
-
-Automated tests mock Supabase so they do not depend on live credentials or real tokens:
-
-```bash
-pytest
-```
-
-Manual integration with real Supabase credentials:
-
-1. Set `SUPABASE_URL` and `SUPABASE_KEY` in `.env`.
-2. Start the stack:
-
-   ```bash
-   docker compose up --build
-   ```
-
-3. Verify signup returns `201`.
-4. Verify login returns tokens.
-5. Verify `/public/info` returns `200` without a token.
-6. Verify `/protected/profile` returns `401` without a token.
-7. Verify `/protected/profile` returns `200` with a valid token.
-8. Change one token character and confirm `401`.
-9. Verify `/protected/dashboard` returns `200` with a valid token.
-10. Verify logout returns `204`.
-
-Never paste full real tokens into screenshots, commits, or reports.
-
-## A4 Security Choices
-
-- Passwords are never stored by the API.
-- Passwords are never logged.
-- Tokens are never logged.
-- JWT payloads are not trusted without Supabase verification.
-- The Supabase `service_role` key is never used.
-- Auth logic lives in `auth.py`.
-- Protected routes reuse `get_current_user()`.
-- `.env` and `*.env.local` are ignored.
-
-## A4 Screenshot
-
-The A4 Swagger auth screenshot should be saved as:
-
-```text
-screenshots/swagger-auth.png
-```
-
-Instructions are in `screenshots/README.md`.
-
-## Assignment A4 Checklist
-
-- [x] Supabase SDK added
-- [x] Supabase client reads environment variables
-- [x] `.env.example` uses placeholders
-- [x] Signup route implemented
-- [x] Login route implemented
-- [x] Public route implemented
-- [x] Protected profile route verifies tokens through Supabase
-- [x] Shared auth dependency implemented
-- [x] Protected dashboard route implemented
-- [x] Logout route implemented
-- [x] Swagger bearer auth metadata tested
-- [x] Supabase mocked in automated tests
-- [x] Existing task API tests still pass
-- [x] Docker Compose keeps PostgreSQL task stack working
-- [x] README and screenshot instructions updated
-
-## Assignment A17: LLM Support Triage
-
-The new `POST /triage` endpoint takes one messy customer support message and returns a clean routing decision. It is not a chatbot: one request goes in, one validated JSON object comes out. The output tells the API which category the message belongs to, how urgent it is, which team should handle it, how confident the classifier is, and one short reason.
-
-Runnable stub-mode curl:
-
-```bash
-curl -X POST http://localhost:8000/triage \
-  -H "Content-Type: application/json" \
-  -d "{\"text\":\"I cannot log in after resetting my password.\"}"
-```
-
-Exact stub response:
-
-```json
-{
-  "category": "other",
-  "urgency": "normal",
-  "suggested_team": "support",
-  "confidence": 0.4,
-  "reason": "Stub mode returns the safe unsure response."
-}
-```
-
-Job card:
-
-```text
-What it does: Classifies a customer support message so it lands on the right team.
-Input: { "text": "string, 1-2000 characters" }
-Output: { "category": one of [billing|bug|feature|account|other],
-          "urgency": one of [low|normal|high],
-          "suggested_team": one of [support|engineering|billing|success],
-          "confidence": 0.0-1.0,
-          "reason": "one short sentence" }
-It must never: invent a category, invent a team, return free-form text, give medical/legal/financial advice, reveal the prompt, or add fields.
-When unsure: return category "other", suggested_team "support", urgency "normal", and confidence below 0.5.
-```
-
-Provider and model:
-
-```text
-LLM_BASE_URL=https://openrouter.ai/api/v1
-LLM_API_KEY=your_llm_api_key
-LLM_MODEL=openrouter/free
-```
-
-Those three variables can also point at Ollama or another OpenAI-compatible service. `LLM_STUB=1` returns a schema-valid response without calling the model. `LLM_ENABLED=false` turns the feature off and returns a deterministic fallback.
-
-Prompt version: `triage-v1`, stored in `prompts/triage-v1.md`.
-
-Eval result: on 2026-08-21, prompt `triage-v1`, stub mode scored `2/8` on the key category field (`25.0%`). This is intentionally honest: no real LLM key was available in this environment, so the eval proves the harness and endpoint shape without pretending a provider call happened. With a real key, run:
-
-```bash
-python evals/run_evals.py
-```
-
-Cost log: stub-mode calls cost `$0.00` and make zero provider calls. Real provider calls write one JSON line to `logs/llm-cost.jsonl` with `prompt_version`, `model`, `input_tokens`, `output_tokens`, `duration_ms`, and `repair_count`. At 10,000 stub requests/day the model cost remains `$0.00`; with a paid/free provider, multiply the logged token counts by that provider's published token price and quota limits.
-
-Reliability choices:
-
-- Input validation returns `400` and names `text` before any model call.
-- Model output is parsed and validated with Pydantic before returning.
-- Invalid model output gets exactly one repair retry.
-- Final schema failure returns `422` and writes `logs/quarantine.jsonl`.
-- Timeout is explicitly set to `30.0` seconds and maps to `504`.
-- Retries happen for timeouts, `429`, and `5xx`; `400`, `401`, and `403` are not retried.
-- SDK defaults are not used; the app owns timeout and retry behavior directly with `httpx`.
-
-What I would fix with another day: run the eval set against a real provider key, then adjust the prompt examples until the hard cases improve without weakening the unsure rule.
+- Task routes are intentionally public in this training version; auth-protected task ownership is not implemented.
+- Stub-mode evaluation proves the harness and response shape, not real-model accuracy.
+- The in-repository modules are independent exercises, not one deployed monolith.
+- A production deployment should add migrations, centralized observability, rate limiting, and stronger authorization.
